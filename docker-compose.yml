@@ -1,0 +1,25 @@
+# =============================================================================
+# ULPF - Compose stack
+#
+# Build & start:      docker compose up --build
+# Stop & remove:      docker compose down
+# View lake data:     it lands in ./lake on your host (volume-mounted)
+# =============================================================================
+services:
+  ulpf:
+    build: .
+    image: ulpf:latest
+    container_name: ulpf-app
+    ports:
+      - "8501:8501"
+    volumes:
+      - ./lake:/app/lake:z
+    environment:
+      - ULPF_LAKE_DIR=/app/lake
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8501/_stcore/health')"]
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 3

@@ -1,18 +1,3 @@
-# =============================================================================
-# ULPF - Universal Log Pre-processing Framework (air-gapped container image)
-#
-# BUILD (from project directory containing Dockerfile):
-#   docker build -t ulpf:latest .
-#
-# RUN standalone:
-#   docker run --rm -p 8501:8501 -v $(pwd)/lake:/app/lake ulpf:latest
-#
-# Or with Compose:
-#   docker compose up --build
-#
-# App will be available at http://localhost:8501
-# The ./lake volume mount persists the Parquet lake across container runs.
-# =============================================================================
 FROM python:3.11-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -24,10 +9,9 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY app.py lake.py ./
-
-# Pre-create the lake directory so volume mounts bind cleanly
-RUN mkdir -p /app/lake
+COPY app.py ./
+COPY ulpf ./ulpf
+COPY .streamlit ./.streamlit
 
 EXPOSE 8501
 

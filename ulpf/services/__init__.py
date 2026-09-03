@@ -1,0 +1,1 @@
+"""External lakehouse integrations."""

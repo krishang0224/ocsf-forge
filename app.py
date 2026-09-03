@@ -1,569 +1,97 @@
-"""
-============================================================================
- Universal Log Pre-processing Framework (ULPF) - Prototype
- Smart India Hackathon | Air-gapped, vendor-agnostic log normalization
-----------------------------------------------------------------------------
- Formats supported: Syslog (RFC5424/3164), Apache/Nginx Access Logs,
-                    CEF (ArcSight), Raw JSON (Cloud/App auth logs)
- Schema:            OCSF v1.1.0-inspired unified taxonomy
- Storage:           JSONL/CSV export + persistent Parquet lake (./lake/)
- Run:               pip install streamlit pandas plotly pyarrow && streamlit run app.py
-============================================================================
-"""
+"""ULPF web entrypoint. Product logic lives in the ulpf package."""
 
-import json
-import re
-import uuid
-import hashlib
-import datetime as dt
-from dataclasses import dataclass, field, asdict
-
-import pandas as pd
-import plotly.express as px
 import streamlit as st
 
-from lake import LakeManager, LAKE_ROOT
+from ulpf.config import settings
+from ulpf.services.minio import MinioService
+from ulpf.services.trino import TrinoService
+from ulpf.ui.dashboard import render_dashboard
+from ulpf.ui.ingestion import render_batch_preview, render_ingestion_controls
+from ulpf.ui.sql_console import render_sql_console
+from ulpf.ui.theme import apply_theme
+
+st.set_page_config(
+    page_title="ULPF Lakehouse",
+    page_icon="◈",
+    layout="wide",
+    initial_sidebar_state="expanded",
+)
+apply_theme()
 
 
-# ============================================================================
-# 1. DATA MODEL
-# ============================================================================
-@dataclass
-class NormalizedEvent:
-    """OCSF-aligned normalized event container."""
-    ocsf_version: str = "1.1.0"
-    event_id: str = ""
-    timestamp: str = ""
-    activity_id: int = 0
-    category_uid: int = 0
-    class_uid: int = 0
-    category: str = "Uncategorized"
-    class_name: str = "Base Event"
-    severity: str = "Informational"
-    severity_id: int = 1
-    status: str = "Unknown"
-    disposition: str = "Unknown"
-    action: str = "Unknown"
-    src_endpoint_ip: str = ""
-    src_endpoint_port: int = None
-    dst_endpoint_ip: str = ""
-    dst_endpoint_port: int = None
-    user: str = ""
-    hostname: str = ""
-    device_vendor: str = ""
-    device_product: str = ""
-    message: str = ""
-    raw_payload_hash: str = ""          # SHA-256 of raw line -> traceability
-    original_raw_payload: str = ""      # LOSSLESS raw preservation
-    source_format: str = ""             # syslog / apache / cef / json
-    parse_success: bool = True
-    parse_notes: str = ""
-
-    def to_json(self):
-        d = asdict(self)
-        return json.dumps(d, indent=2, default=str)
+@st.cache_resource
+def services() -> tuple[TrinoService, MinioService]:
+    return TrinoService(), MinioService()
 
 
-SEVERITY_MAP = {          # OCSF severity_id mapping
-    "Unknown": 0, "Informational": 1, "Low": 2,
-    "Medium": 3, "High": 4, "Critical": 6,
-}
+trino, minio = services()
+trino_ready, trino_detail = trino.health()
+minio_state = minio.status()
+if trino_ready:
+    try:
+        trino.ensure_lakehouse()
+    except Exception as exc:
+        trino_ready, trino_detail = False, str(exc)
 
-
-# ============================================================================
-# 2. PARSING ENGINE (Regex / JSON extraction per format)
-# ============================================================================
-class LogParserEngine:
-    """Detects format and extracts source-specific attributes."""
-
-    RE_LOG4J = re.compile(
-        r"^(?P<date>\d{4}-\d{2}-\d{2})\s+(?P<time>\d{2}:\d{2}:\d{2},\d{3})\s+"
-        r"(?P<level>TRACE|DEBUG|INFO|WARN|ERROR|FATAL)\s+"
-        r"\[(?P<thread>[^\]]+)\]\s+(?P<logger>[\w.$]+):\s*(?P<msg>.*)$")
-
-    LOG4J_SEVERITY = {
-        "FATAL": "Critical", "ERROR": "High", "WARN": "Medium",
-        "INFO": "Informational", "DEBUG": "Informational", "TRACE": "Informational"
-    }
-
-    # --- Regex patterns -----------------------------------------------------
-    RE_SYSLOG_RFC3164 = re.compile(
-        r'^(?P<pri><\d+>)?(?P<ts>(?P<mon>[A-Z][a-z]{2})\s+(?P<day>\d{1,2})\s'
-        r'(?P<time>\d{2}:\d{2}:\d{2}))\s+(?P<host>\S+)\s+(?P<tag>[\w\-\/\.]+)?'
-        r'(?:\[(?P<pid>\d+)\])?:\s*(?P<msg>.*)$')
-
-    RE_SYSLOG_KV = re.compile(r'(\w+)=(\"[^\"]*\"|\S+)')   # key=value pairs
-
-    RE_APACHE = re.compile(
-        r'^(?P<ip>\S+)\s+\S+\s+(?P<user>\S+)\s+\[(?P<ts>[^\]]+)\]\s+'
-        r'"(?P<method>\S+)\s+(?P<path>\S+)\s+(?P<proto>[^"]+)"\s+'
-        r'(?P<status>\d{3})\s+(?P<bytes>\d+)(?:\s+"(?P<ref>[^"]*)")?'
-        r'\s+"(?P<ua>[^"]*)"')
-
-    RE_CEF_HEADER = re.compile(
-        r'^CEF:(?P<ver>\d+)\|(?P<vendor>[^|]*)\|(?P<product>[^|]*)\|'
-        r'(?P<dversion>[^|]*)\|(?P<sigid>[^|]*)\|(?P<name>[^|]*)\|'
-        r'(?P<severity>[^|]*)\|(?P<ext>.*)$')
-
-    RE_TS_ISO = re.compile(
-        r'(?P<y>\d{4})-(?P<m>\d{2})-(?P<d>\d{2})[T ](?P<t>\d{2}:\d{2}:\d{2})')
-
-    def detect_format(self, line: str) -> str:
-        s = line.strip()
-        if not s:
-            return "empty"
-        if self.RE_LOG4J.match(s):
-            return "log4j"
-        if s.startswith("CEF:") or "<34>" in s[:12] and "CEF:" in s:
-            return "cef"
-        try:
-            obj = json.loads(s)
-            if isinstance(obj, dict):
-                return "json"
-        except Exception:
-            pass
-        if self.RE_APACHE.match(s):
-            return "apache"
-        if s.startswith("<") or self.RE_SYSLOG_RFC3164.match(s) or "=" in s and " " in s:
-            return "syslog"
-        return "unknown"
-
-    # --- Individual parsers return dict of extracted attrs -------------------
-    def parse_log4j(self, line: str) -> dict:
-        m = self.RE_LOG4J.match(line.strip())
-        if not m:
-            return {"_parsed": False}
-        g = m.groupdict()
-        ts = f"{g['date']}T{g['time'].replace(',', '.')}"
-        component = g["logger"].rsplit(".", 1)[-1]
-        lvl = g["level"]
-        return {
-            "_parsed": True, "timestamp": ts, "message": g["msg"],
-            "severity": self.LOG4J_SEVERITY.get(lvl, "Informational"),
-            "action": "Error" if lvl in ("ERROR", "FATAL") else "Warning" if lvl == "WARN" else "Observed",
-            "disposition": "Failed" if lvl in ("ERROR", "FATAL") else "Success",
-            "device_product": component, "hostname": "",
-            "kv": {"thread": g["thread"], "logger": g["logger"], "level": lvl}
-        }
-
-    def parse_syslog(self, line: str) -> dict:
-        out, m = {}, self.RE_SYSLOG_RFC3164.match(line.strip())
-        now = dt.datetime.now()
-        if m:
-            g = m.groupdict()
-            ts = f"{now.year}-{g['mon']}-{int(g['day']):02d}T{g['time']}"
-            out.update(timestamp=ts, hostname=g["host"], message=g["msg"])
-            kv = {k: v.strip('"') for k, v in self.RE_SYSLOG_KV.findall(g["msg"] or "")}
-            out["kv"] = kv
-            msg = g["msg"].lower()
-            if any(w in msg for w in ("deny", "drop", "block", "reject")):
-                out["action"], out["disposition"], out["severity"] = \
-                    "Denied", "Blocked", "Medium"
-                if "critical" in msg or "attack" in msg:
-                    out["severity"] = "Critical"
-            elif any(w in msg for w in ("allow", "accept", "permit")):
-                out.update(action="Allowed", disposition="Allowed", severity="Informational")
-            else:
-                out.update(action="Observed", disposition="Allowed", severity="Informational")
-            for k in ("src", "srcip", "src_ip", "spt"):
-                pass
-            out["src_endpoint_ip"] = kv.get("src") or kv.get("srcip") or kv.get("src_ip", "")
-            out["dst_endpoint_ip"] = kv.get("dst") or kv.get("dstip") or kv.get("dst_ip", "")
-            try: out["src_endpoint_port"] = int(kv.get("sport", 0) or None)
-            except Exception: out["src_endpoint_port"] = None
-            try: out["dst_endpoint_port"] = int(kv.get("dport", 0) or None)
-            except Exception: out["dst_endpoint_port"] = None
-            out["device_product"] = kv.get("deviceProduct") or g.get("tag") or "firewall"
-            out["_parsed"] = True
-        else:
-            out["_parsed"] = False
-        return out
-
-    def parse_apache(self, line: str) -> dict:
-        m = self.RE_APACHE.match(line.strip())
-        if not m:
-            return {"_parsed": False}
-        g = m.groupdict()
-        try:
-            ts = dt.datetime.strptime(
-                g["ts"], "%d/%b/%Y:%H:%M:%S %z").strftime("%Y-%m-%dT%H:%M:%S")
-        except Exception:
-            ts = g["ts"]
-        status = int(g["status"])
-        sev = ("High" if status >= 500 else "Low" if status >= 400 else "Informational")
-        action = "Denied" if status in (401, 403) else "Allowed"
-        return {"_parsed": True, "timestamp": ts, "message":
-                f"{g['method']} {g['path']} -> {status}",
-                "src_endpoint_ip": g["ip"], "user": "" if g["user"] == "-" else g["user"],
-                "severity": sev, "action": action,
-                "disposition": "Denied" if status in (401,403) else "Allowed",
-                "status": f"HTTP {status}", "device_product": "httpd",
-                "kv": {"http_status": g["status"], "bytes": g["bytes"],
-                       "path": g["path"], "user_agent": g["ua"]}}
-
-    def parse_cef(self, line: str) -> dict:
-        m = self.RE_CEF_HEADER.match(line.strip())
-        if not m:
-            return {"_parsed": False}
-        g = m.groupdict()
-        ext = {}
-        for pair in g["ext"].split():
-            if "=" in pair:
-                k, _, v = pair.partition("=")
-                ext[k] = v
-        sev_raw = g["severity"].strip()
-        try: n = int(sev_raw); sev = "Critical" if n >= 9 else "High" if n >= 7 \
-             else "Medium" if n >= 4 else "Low"
-        except ValueError: sev = {"low":"Low","medium":"Medium",
-                                  "high":"High","very-high":"Critical",
-                                  "critical":"Critical"}.get(sev_raw.lower(),"Medium")
-        return {"_parsed": True,
-                "timestamp": dt.datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),
-                "hostname": ext.get("dhost", ext.get("dvchost", "")),
-                "device_vendor": g["vendor"], "device_product": g["product"],
-                "message": g["name"], "severity": sev,
-                "action": ext.get("act", "Detected"),
-                "disposition": ext.get("outcome", "Suspicious"),
-                "src_endpoint_ip": ext.get("src", ""),
-                "dst_endpoint_ip": ext.get("dst", ""),
-                "user": ext.get("suser", ext.get("duser", "")),
-                "kv": ext}
-
-    def parse_json(self, line: str) -> dict:
-        try:
-            obj = json.loads(line.strip())
-        except Exception:
-            return {"_parsed": False}
-        sev = str(obj.get("severity", obj.get("risk", "Informational"))).title()
-        if sev.lower() in ("error",): sev = "High"
-        if sev.lower() in ("fatal",): sev = "Critical"
-        act = obj.get("event_type", obj.get("action", "Observed"))
-        denied = act.lower() in ("login_failure", "denied", "blocked", "failed_login")
-        ts = obj.get("timestamp", obj.get("@timestamp", obj.get("time", "")))
-        return {"_parsed": True, "timestamp": str(ts),
-                "hostname": obj.get("host", obj.get("source", "")),
-                "user": obj.get("user", obj.get("username", obj.get("actor", ""))),
-                "message": obj.get("message", obj.get("event", json.dumps(obj)[:200])),
-                "severity": sev, "action": act,
-                "disposition": "Failed" if denied else "Success",
-                "src_endpoint_ip": obj.get("src_ip", obj.get("client_ip", obj.get("ip", ""))),
-                "dst_endpoint_ip": obj.get("dst_ip", obj.get("server", "")),
-                "device_vendor": obj.get("vendor", "Application"),
-                "device_product": obj.get("service", obj.get("app", "auth-service")),
-                "kv": {k: str(v) for k, v in obj.items() if k != "raw"}}
-
-    PARSERS = {"log4j": parse_log4j, "syslog": parse_syslog, "apache": parse_apache,
-               "cef": parse_cef, "json": parse_json}
-
-    def parse_line(self, line: str):
-        fmt = self.detect_format(line)
-        parser = self.PARSERS.get(fmt)
-        extracted = parser(self, line) if parser else {"_parsed": False}
-        extracted.setdefault("_parsed", False)
-        return fmt, extracted
-
-
-# ============================================================================
-# 3. OCSF NORMALIZER
-# ============================================================================
-class OCSFNormalizer:
-    """Maps parsed attributes into the OCSF taxonomy; guarantees lossless raw."""
-
-    CATEGORY_BY_FORMAT = {
-        "syslog": ("Network Activity", 4),   # category_uid 4 = Network
-        "apache": ("Network Activity", 4),
-        "cef":    ("Findings", 2),           # category_uid 2 = Findings
-        "json":   ("Audit Activity", 3),
-        "log4j":  ("Application Activity", 6),     # category_uid 3 = Audit
-    }
-    CLASS_BY_ACTION = {
-        "Denied": ("Firewall Activity", 2003), "Blocked": ("Firewall Activity", 2003),
-        "Allowed": ("Firewall Activity", 2003), "Detected": ("Detection Finding", 2004),
-        "Login Failure": ("Authentication", 3002),
-    }
-
-    @staticmethod
-    def _sha(line: str) -> str:
-        return hashlib.sha256(line.encode("utf-8", errors="replace")).hexdigest()
-
-    def normalize(self, raw_line: str, fmt: str, x: dict) -> NormalizedEvent:
-        cat_name, cat_uid = self.CATEGORY_BY_FORMAT.get(fmt, ("Uncategorized", 99))
-        cls_name, cls_uid = self.CLASS_BY_ACTION.get(x.get("action", ""), ("Base Event", 0))
-        sev = x.get("severity", "Informational")
-        ev = NormalizedEvent(
-            event_id=str(uuid.uuid4()),
-            timestamp=x.get("timestamp") or dt.datetime.now().isoformat(),
-            category_uid=cat_uid, class_uid=cls_uid,
-            category=cat_name, class_name=cls_name,
-            severity=sev, severity_id=SEVERITY_MAP.get(sev, 1),
-            status=x.get("status", "Success" if x.get("_parsed") else "Failure"),
-            disposition=x.get("disposition", "Unknown"),
-            action=x.get("action", "Unknown"),
-            src_endpoint_ip=x.get("src_endpoint_ip", "") or "",
-            src_endpoint_port=x.get("src_endpoint_port"),
-            dst_endpoint_ip=x.get("dst_endpoint_ip", "") or "",
-            dst_endpoint_port=x.get("dst_endpoint_port"),
-            user=x.get("user", ""), hostname=x.get("hostname", ""),
-            device_vendor=x.get("device_vendor", ""),
-            device_product=x.get("device_product", fmt),
-            message=(x.get("message") or "")[:500],
-            raw_payload_hash=self._sha(raw_line),
-            original_raw_payload=raw_line.rstrip("\n"),   # LOSSLESS
-            source_format=fmt,
-            parse_success=bool(x.get("_parsed")),
-            parse_notes="" if x.get("_parsed") else "Format recognized but field extraction incomplete",
-        )
-        return ev
-
-
-# ============================================================================
-# 4. SAMPLE ENTERPRISE LOG CORPUS (embedded, works instantly offline)
-# ============================================================================
-SAMPLE_LOGS = """
-<134>Jan 15 03:14:22 fw-core-01 FortiOS-100D: action=deny src=10.20.5.31 dst=203.0.113.45 sport=51244 dport=23 proto=6 deviceProduct=FortiGate policyid=42 msg=\"Telnet access attempt blocked by security policy\"
-<134>Jan 15 03:15:01 fw-edge-02 PaloAlto-PA220: action=allow src=172.16.8.100 dst=93.184.216.34 sport=49152 dport=443 proto=6 deviceProduct=PAN-OS msg=\"HTTPS session permitted outbound\"
-<134>Jan 15 03:16:40 fw-core-01 FortiOS-100D: action=deny src=198.51.100.77 dst=10.20.5.10 sport=33891 dport=3389 proto=6 deviceProduct=FortiGate msg=\"RDP brute force attack detected from external host - CRITICAL threat signature matched\"
-10.14.22.101 - alice [15/Jan/2025:03:17:05 +0000] \"GET /api/v1/users HTTP/1.1\" 200 4821 \"https://portal.corp.com/dashboard\" \"Mozilla/5.0\"
-10.14.22.101 - bob [15/Jan/2025:03:18:12 +0000] \"POST /admin/login HTTP/1.1\" 401 210 \"-\" \"curl/7.68.0\"
-203.0.113.90 - - [15/Jan/2025:03:19:44 +0000] \"GET /../../etc/passwd HTTP/1.1\" 403 153 \"-\" \"sqlmap/1.5\"
-192.168.1.55 - carol [15/Jan/2025:03:20:30 +0000] \"DELETE /api/v1/db/users/42 HTTP/1.1\" 500 88 \"-\" \"python-requests/2.28\"
-CEF:0|CrowdStrike|FalconSensor|6.32|8001|Malware Detected: Emotet variant|9|src=10.20.5.31 dst=10.20.5.10 suser=jdoe dhost=WS-FIN-04 act=Quarantine outcome=success cs1=TTP:T1055 fname=invoice.exe
-CEF:0|Symantec|EndpointProtection|14.3|2222|Suspicious Network Connection Blocked|7|src=192.168.4.20 dst=45.155.205.233 suser=svc_backup act=Block outcome=success dpt=8080
-{\"timestamp\":\"2025-01-15T03:25:11Z\",\"event_type\":\"login_success\",\"user\":\"alice\",\"src_ip\":\"10.14.22.101\",\"server\":\"auth.corp.local\",\"service\":\"okta-sso\",\"severity\":\"info\",\"message\":\"User authenticated via SSO MFA\"}
-{\"timestamp\":\"2025-01-15T03:26:47Z\",\"event_type\":\"login_failure\",\"user\":\"admin\",\"src_ip\":\"203.0.113.90\",\"server\":\"vpn-gw-01\",\"service\":\"cisco-anyconnect\",\"severity\":\"warning\",\"message\":\"Failed VPN login - 5th consecutive attempt\"}
-{\"timestamp\":\"2025-01-15T03:27:59Z\",\"event_type\":\"privilege_escalation\",\"user\":\"bob\",\"src_ip\":\"192.168.1.55\",\"server\":\"db-prod-02\",\"service\":\"linux-auditd\",\"severity\":\"critical\",\"message\":\"sudoers file modified by non-admin service account\"}
-""".strip().splitlines()
-
-
-# ============================================================================
-# 5. PIPELINE ORCHESTRATOR
-# ============================================================================
-@st.cache_resource(show_spinner=False)
-def get_lake() -> LakeManager:
-    return LakeManager()
-
-
-@st.cache_data(show_spinner=False)
-def run_pipeline(lines: tuple) -> list:
-    engine, normalizer = LogParserEngine(), OCSFNormalizer()
-    events = []
-    for line in lines:
-        if not line.strip():
-            continue
-        fmt, x = engine.parse_line(line)
-        events.append(normalizer.normalize(line, fmt, x))
-    return events
-
-
-def events_to_df(events):
-    rows = [{**{k: v for k, v in asdict(e).items() if k != "original_raw_payload"}}
-            for e in events]
-    df = pd.DataFrame(rows)
-    df.insert(0, "select", False)
-    return df
-
-
-# ============================================================================
-# 6. STREAMLIT UI
-# ============================================================================
-st.set_page_config(page_title="ULPF - Universal Log Pre-processing Framework",
-                   page_icon="🛡️", layout="wide")
-
-st.title("🛡️ ULPF — Universal Log Pre-processing Framework")
-st.caption("Air-gapped • Vendor-agnostic • OCSF v1.1.0 Normalized • Lossless Raw Preservation")
-
-lake = get_lake()
-
-# ------------------------- SIDEBAR -----------------------------------------
 with st.sidebar:
-    st.header("📥 Log Ingestion")
-    mode = st.radio("Ingestion Mode", ["Sample Enterprise Logs", "Upload File (.log/.txt)", "Paste Raw Logs"])
-
-    lines = []
-    if mode == "Sample Enterprise Logs":
-        lines = SAMPLE_LOGS
-        st.info(f"{len(lines)} embedded sample logs loaded.")
-    elif mode == "Upload File (.log/.txt)":
-        up = st.file_uploader("Drop a .log / .txt file", type=["log", "txt"])
-        if up:
-            lines = up.read().decode("utf-8", errors="replace").splitlines()
-    else:
-        txt = st.text_area("Paste raw logs (one event per line)", height=180,
-                           placeholder="<134>Jan 15 03:14:22 fw-01: action=deny src=... ")
-        if txt.strip():
-            lines = txt.splitlines()
-
+    st.markdown('<p class="eyebrow">Universal log pipeline</p>', unsafe_allow_html=True)
+    st.markdown("## ULPF")
+    st.caption("Normalize once. Query everywhere.")
     st.divider()
-
-    # --------------------- PERSISTENT PARQUET LAKE STATUS -------------------
-    st.header("🗄️ Lake Status")
-    lake_stats = lake.status()
-    lc1, lc2 = st.columns(2)
-    lc1.metric("Events Stored", lake_stats["total_events"])
-    lc2.metric("Partitions", lake_stats["num_partitions"])
-    if lake_stats["partition_list"]:
-        st.caption(f"Lake size: {lake_stats['size_mb']} MB · `{LAKE_ROOT}`")
-        with st.expander("Partition layout (source_format/date)"):
-            st.code("\n".join(lake_stats["partition_list"]), language="text")
-    else:
-        st.caption(f"Lake is empty · writes go to `{LAKE_ROOT}`")
-
-    auto_lake = st.toggle("Auto-write ingested batches to lake", value=True,
-                          help="Every ingestion run appends its normalized "
-                               "events to the persistent Parquet lake.")
-
+    events, ingest_clicked = render_ingestion_controls()
+    if ingest_clicked:
+        with st.spinner("Committing an atomic Iceberg snapshot…"):
+            try:
+                written = trino.insert_events(events)
+                st.success(f"Committed {written:,} events")
+                st.cache_data.clear()
+            except Exception as exc:
+                st.error("Ingestion failed")
+                with st.expander("Detail"):
+                    st.code(str(exc))
     st.divider()
-    st.header("📤 Export Normalized Output")
-    export_btn = st.button("⬇️ Prepare Export Files")
-    lake_write_btn = st.button("🗄️ Write current batch to Lake")
+    st.markdown("### Stack")
+    st.markdown(f"{'🟢' if trino_ready else '🟠'} Trino")
+    st.caption(trino_detail if trino_ready else "Waiting for query engine")
+    st.markdown(f"{'🟢' if minio_state['ready'] else '🟠'} MinIO")
+    st.caption(
+        f"{minio_state['objects']:,} objects · {minio_state['size_mb']:.2f} MB"
+        if minio_state["ready"]
+        else "Waiting for warehouse"
+    )
 
-# ------------------------- PROCESSING --------------------------------------
-if not lines:
-    st.warning("👈 Select an ingestion mode in the sidebar to begin.")
-    st.stop()
+st.markdown('<p class="eyebrow">Security analytics lakehouse</p>', unsafe_allow_html=True)
+st.title("Logs, normalized and queryable")
+st.caption("OCSF-aligned events · Apache Iceberg snapshots · MinIO object storage · Trino SQL")
 
-events = run_pipeline(tuple(lines))
-df_all = events_to_df(events)
-
-# ------------------------- LAKE INGESTION ----------------------------------
-if events:
-    # Hash current batch of lines to generate a unique footprint
-    lines_sig = hashlib.sha256("\n".join(lines).encode()).hexdigest()
-    already_written = st.session_state.get("last_lake_write") == lines_sig
-
-    # Only write if button explicitly clicked OR if auto_lake is active and batch hasn't been written yet
-    if lake_write_btn or (auto_lake and not already_written):
-        lake_result = lake.append_events(events)
-        st.session_state["last_lake_write"] = lines_sig
+tab_data, tab_ingest, tab_sql, tab_about = st.tabs(["Current data", "Batch preview", "SQL workspace", "Architecture"])
+with tab_data:
+    if trino_ready:
+        render_dashboard(trino)
     else:
-        lake_result = None
-else:
-    lake_result = None
-if lake_result:
-    st.toast(f"🗄️ Lake: wrote {lake_result['written']} events "
-             f"across {len(lake_result['partitions'])} partitions.",
-             icon="✅")
-
-total = len(events)
-success_rate = round(100 * sum(e.parse_success for e in events) / total, 1) if total else 0
-high_crit = sum(e.severity in ("High", "Critical") for e in events)
-unique_ips = len({e.src_endpoint_ip for e in events if e.src_endpoint_ip})
-
-# ------------------------- KPI CARDS ---------------------------------------
-st.subheader("📊 Pipeline Metrics")
-c1, c2, c3, c4 = st.columns(4)
-c1.metric("Total Logs Ingested", total)
-c2.metric("Parsing Success Rate", f"{success_rate}%")
-c3.metric("High/Critical Threats", high_crit,
-          delta="⚠ review" if high_crit else "clean", delta_color="inverse" if high_crit else "normal")
-c4.metric("Unique Source IPs", unique_ips)
-
-# ------------------------- CHARTS ------------------------------------------
-col_a, col_b = st.columns([1, 2])
-with col_a:
-    fig_sev = px.pie(df_all.drop_duplicates(subset="event_id"), names="severity",
-                     color="severity",
-                     color_discrete_map={"Critical": "#d62728", "High": "#ff7f0e",
-                                         "Medium": "#ffd700", "Low": "#2ca02c",
-                                         "Informational": "#1f77b4"},
-                     title="Severity Distribution", hole=0.4)
-    st.plotly_chart(fig_sev, use_container_width=True)
-with col_b:
-    fig_cat = px.histogram(df_all.drop_duplicates(subset="event_id"), x="category",
-                           color="source_format", barmode="group",
-                           title="Category Breakdown by Source Format",
-                           labels={"count": "Events"})
-    st.plotly_chart(fig_cat, use_container_width=True)
-
-# ------------------------- FORENSICS TABS ----------------------------------
-tab_explore, tab_inspect, tab_export, tab_lake = st.tabs(
-    ["🔎 Log Explorer", "🔬 Raw vs Normalized Inspection",
-     "💾 SIEM / Data Lake Export", "🗄️ Persistent Parquet Lake"])
-
-with tab_explore:
-    fc1, fc2, fc3 = st.columns([2, 1, 1])
-    kw = fc1.text_input("🔍 Search keyword (IP, user, message…)")
-    sev_f = fc2.multiselect("Severity", sorted(df_all.severity.unique()))
-    fmt_f = fc3.multiselect("Source Format", sorted(df_all.source_format.unique()))
-
-    view = df_all.copy()
-    if kw:
-        mask = view.apply(lambda r: kw.lower() in str(r.values).lower(), axis=1)
-        view = view[mask]
-    if sev_f:
-        view = view[view.severity.isin(sev_f)]
-    if fmt_f:
-        view = view[view.source_format.isin(fmt_f)]
-
-    display_cols = ["timestamp", "category", "class_name", "severity", "action",
-                    "src_endpoint_ip", "dst_endpoint_ip", "user", "hostname",
-                    "device_product", "source_format", "parse_success"]
-    st.dataframe(view[display_cols], use_container_width=True, height=380)
-
-    idx_options = view.index.tolist()
-    sel_idx = st.selectbox("Select row index for inspection:", idx_options,
-                           format_func=lambda i: f"{i} | {view.loc[i,'severity']:12s}"
-                                                 f"| {str(view.loc[i,'src_endpoint_ip'])[:15]:15s}"
-                                                 f"| {str(view.loc[i,'message'])[:60]}")
-
-with tab_inspect:
-    if sel_idx is not None and sel_idx in df_all.index:
-        ev = events[sel_idx]
-        left, right = st.columns(2)
-        left.markdown("**📜 Original Raw Payload (Lossless)**")
-        left.code(ev.original_raw_payload, language="text")
-        right.markdown("**🧩 Normalized OCSF v1.1.0 JSON**")
-        right.code(ev.to_json(), language="json")
-        st.caption(f"Traceability: raw payload SHA-256 → `{ev.raw_payload_hash}` "
-                   f"| event_id `{ev.event_id}`")
-    else:
-        st.info("Select a row in the Log Explorer tab.")
-
-with tab_export:
-    st.markdown("Export the normalized OCSF stream ready for **SIEM ingestion** "
-                "(Splunk HEC / Elastic) or **Data Lake landing zones** (JSONL/CSV).")
-    clean = [asdict(e) for e in events]
-    json_bytes = ("\n".join(json.dumps(c, default=str) for c in clean)).encode()
-    csv_bytes = pd.DataFrame(clean).to_csv(index=False).encode()
-
-    st.download_button("⬇️ Download normalized_logs.json (JSONL)", json_bytes,
-                       "normalized_logs.json", "application/json")
-    st.download_button("⬇️ Download normalized_logs.csv", csv_bytes,
-                       "normalized_logs.csv", "text/csv")
-
-    if export_btn:
-        st.success(f"✅ {len(clean)} normalized events prepared — "
-                   f"raw payloads preserved losslessly with SHA-256 hashes.")
-
-with tab_lake:
+        st.info("The lakehouse is starting. Current Iceberg data will appear when Trino is ready.")
+with tab_ingest:
+    render_batch_preview(events)
+with tab_sql:
+    render_sql_console(trino)
+with tab_about:
+    st.subheader("End-to-end data path")
+    st.code(
+        "Raw JSON / Syslog / CEF / Access logs\n"
+        "        │\n"
+        "        ▼\n"
+        "ULPF parser + OCSF normalizer\n"
+        "        │  parameterized INSERT\n"
+        "        ▼\n"
+        "Apache Trino ───── metadata ─────▶ Iceberg REST Catalog\n"
+        "        │                              │\n"
+        "        └──── Parquet + metadata ─────▶ MinIO",
+        language="text",
+    )
     st.markdown(
-        "**Persistent, append-only Parquet lake** at `./lake/`, partitioned by "
-        "`source_format` and `ingest_date` (Hive-style). Events accumulate "
-        "across runs and are directly readable by Spark / DuckDB / Pandas.")
-    ldf = lake.read_all()
-    if ldf.empty:
-        st.info("Lake is empty. Toggle **Auto-write** in the sidebar (or press "
-                "**Write current batch to Lake**) and ingest some logs.")
-    else:
-        lk1, lk2, lk3 = st.columns(3)
-        lk1.metric("Total Events in Lake", len(ldf))
-        lk2.metric("Partitions", lake.status()["num_partitions"])
-        lk3.metric("Lake Size (MB)", lake.status()["size_mb"])
-
-        st.dataframe(
-            ldf.drop(columns=[c for c in ("original_raw_payload", "select")
-                              if c in ldf.columns]).head(200),
-            use_container_width=True, height=320)
-
-        lake_csv = ldf.drop(
-            columns=[c for c in ("select",) if c in ldf.columns]
-        ).to_csv(index=False).encode()
-        st.download_button("⬇️ Download full lake snapshot (CSV)", lake_csv,
-                           "lake_snapshot.csv", "text/csv")
-        st.caption("Query example: `duckdb.connect().execute("
-                   "\"SELECT * FROM read_parquet('lake/**/*.parquet', hive_partitioning=true)\")`")
-
-st.divider()
-st.caption("ULPF Prototype · Runs fully offline (air-gap compatible) · "
-           "Extensible via new parser plug-ins in `LogParserEngine.PARSERS` · "
-           "Persistent Parquet lake in `./lake/`")
+        "The application submits normalized batches to Trino. The Iceberg connector coordinates atomic snapshots through the REST catalog and stores Parquet data and metadata in the persistent MinIO warehouse."
+    )
+    st.markdown("**Safety defaults**")
+    st.markdown(
+        f"The browser SQL workspace is read-only. It returns at most **{settings.query_row_limit:,} rows** and accepts one statement at a time. Set `ULPF_ALLOW_MUTATING_SQL=true` only in a trusted environment when analysts need DDL or DML."
+    )

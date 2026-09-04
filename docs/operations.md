@@ -8,7 +8,7 @@ Normal `docker compose down` does not delete these volumes. Never use `down --vo
 
 ## Ingestion recovery
 
-Iceberg commits are atomic per table, but one ULPF run touches raw, normalized/quarantine, and run metadata tables. A process can fail between those commits. Recovery is safe because every event ID is deterministic and every table uses `MERGE ... WHEN NOT MATCHED`; replay the same source identity and offsets to fill any missing table without duplicating completed rows.
+Iceberg commits are atomic per table, but one OCSF Forge run touches raw, normalized/quarantine, and run metadata tables. A process can fail between those commits. Recovery is safe because every event ID is deterministic and every table uses `MERGE ... WHEN NOT MATCHED`; replay the same source identity and offsets to fill any missing table without duplicating completed rows.
 
 Kafka offsets are committed only after the Iceberg writes and dead-letter flush succeed. A crash therefore causes replay, which the same event IDs deduplicate.
 

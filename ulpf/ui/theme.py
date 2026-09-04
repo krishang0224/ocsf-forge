@@ -1,4 +1,4 @@
-"""ULPF visual system."""
+"""OCSF Forge visual styles."""
 
 import streamlit as st
 

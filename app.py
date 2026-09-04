@@ -1,4 +1,4 @@
-"""ULPF web entrypoint. Product logic lives in the ulpf package."""
+"""OCSF Forge web entrypoint."""
 
 from dataclasses import replace
 
@@ -13,7 +13,7 @@ from ulpf.ui.sql_console import render_sql_console
 from ulpf.ui.theme import apply_theme
 
 st.set_page_config(
-    page_title="ULPF Lakehouse",
+    page_title="OCSF Forge",
     page_icon="◈",
     layout="wide",
     initial_sidebar_state="expanded",
@@ -44,9 +44,9 @@ if trino_ready and not st.session_state.get("lakehouse_initialized"):
         trino_ready, trino_detail = False, str(exc)
 
 with st.sidebar:
-    st.markdown('<p class="eyebrow">Universal log pipeline</p>', unsafe_allow_html=True)
-    st.markdown("## ULPF")
-    st.caption("Normalize once. Query everywhere.")
+    st.markdown('<p class="eyebrow">Mixed logs → OCSF</p>', unsafe_allow_html=True)
+    st.markdown("## OCSF Forge")
+    st.caption("Keep the evidence. Unify the schema.")
     st.divider()
     events, ingest_clicked = render_ingestion_controls()
     if ingest_clicked:
@@ -69,8 +69,8 @@ with st.sidebar:
     st.markdown(f"{'🟢' if minio_state['ready'] else '🟠'} MinIO")
     st.caption("Warehouse bucket available" if minio_state["ready"] else "Waiting for warehouse")
 
-st.markdown('<p class="eyebrow">Security analytics lakehouse</p>', unsafe_allow_html=True)
-st.title("Logs, normalized and queryable")
+st.markdown('<p class="eyebrow">Security event pipeline</p>', unsafe_allow_html=True)
+st.title("Any log format. One security schema.")
 st.caption("OCSF-aligned events · Apache Iceberg snapshots · MinIO object storage · Trino SQL")
 
 tab_data, tab_ingest, tab_sql, tab_about = st.tabs(["Current data", "Batch preview", "SQL workspace", "Architecture"])

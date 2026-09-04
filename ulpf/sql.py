@@ -42,7 +42,7 @@ SELECT
     count(*) AS total_events,
     count_if(log_level IN ('High', 'Critical')) AS high_critical,
     count(DISTINCT NULLIF(ip_address, '')) AS unique_source_ips,
-    round(100.0 * count_if(parse_success) / NULLIF(count(*), 0), 1) AS parse_rate
+    coalesce(round(100.0 * count_if(parse_success) / NULLIF(count(*), 0), 1), 0.0) AS parse_rate
 FROM iceberg.logging.application_logs
 """.strip()
 

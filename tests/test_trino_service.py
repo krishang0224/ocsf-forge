@@ -1,3 +1,4 @@
+from contextlib import contextmanager
 from dataclasses import replace
 
 import pytest
@@ -11,11 +12,14 @@ class RecordingTrino(TrinoService):
     def __init__(self, config=settings):
         super().__init__(config)
         self.calls = []
+        self.connections = 0
 
-    def ensure_lakehouse(self):
-        return None
+    @contextmanager
+    def _connection(self):
+        self.connections += 1
+        yield object()
 
-    def execute(self, statement, params=None):
+    def _execute_on_connection(self, connection, statement, params=None):
         self.calls.append((statement, params))
         return (["value"], [[1]]) if statement.lstrip().upper().startswith("SELECT") else ([], [])
 
@@ -54,3 +58,26 @@ def test_ingestion_uses_bound_parameters():
     assert "?" in statement
     assert event.message not in statement
     assert event.message in params
+    assert client.connections == 1
+
+
+def test_ingestion_reuses_one_connection_across_batches():
+    client = RecordingTrino(replace(settings, insert_batch_size=2))
+    events = [NormalizedEvent(event_id=f"event-{index}") for index in range(5)]
+    assert client.insert_events(events) == 5
+    assert client.connections == 1
+    assert len(client.calls) == 3
+
+
+def test_lakehouse_setup_reuses_one_connection():
+    client = RecordingTrino()
+    client.ensure_lakehouse()
+    assert client.connections == 1
+    assert len(client.calls) == 2
+
+
+def test_query_bundle_reuses_one_connection():
+    client = RecordingTrino()
+    results = client.query_many({"first": "SELECT 1", "second": "SELECT 2"})
+    assert client.connections == 1
+    assert set(results) == {"first", "second"}

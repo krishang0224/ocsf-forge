@@ -51,16 +51,21 @@ class TrinoService:
             return False, str(exc)
 
     def ensure_lakehouse(self) -> None:
-        self.execute(CREATE_SCHEMA)
-        self.execute(CREATE_TABLE)
+        with self._connection() as connection:
+            self._execute_on_connection(connection, CREATE_SCHEMA)
+            self._execute_on_connection(connection, CREATE_TABLE)
 
     def execute(self, statement: str, params: list | tuple | None = None) -> tuple[list[str], list[list]]:
         with self._connection() as connection:
-            cursor = connection.cursor()
-            cursor.execute(statement, params)
-            rows = cursor.fetchall()
-            columns = [column[0] for column in cursor.description] if cursor.description else []
-            return columns, rows
+            return self._execute_on_connection(connection, statement, params)
+
+    @staticmethod
+    def _execute_on_connection(connection, statement: str, params: list | tuple | None = None):
+        cursor = connection.cursor()
+        cursor.execute(statement, params)
+        rows = cursor.fetchall()
+        columns = [column[0] for column in cursor.description] if cursor.description else []
+        return columns, rows
 
     def query(self, statement: str, enforce_read_only: bool = True) -> tuple[pd.DataFrame, float]:
         sql = statement.strip()
@@ -81,11 +86,19 @@ class TrinoService:
             return pd.DataFrame(rows, columns=columns), elapsed
         return pd.DataFrame({"status": ["Statement completed"]}), elapsed
 
+    def query_many(self, statements: dict[str, str]) -> dict[str, pd.DataFrame]:
+        """Run a related query bundle in one Trino session."""
+        results: dict[str, pd.DataFrame] = {}
+        with self._connection() as connection:
+            for name, statement in statements.items():
+                columns, rows = self._execute_on_connection(connection, statement)
+                results[name] = pd.DataFrame(rows[: self.config.query_row_limit], columns=columns)
+        return results
+
     def insert_events(self, events: Iterable[NormalizedEvent]) -> int:
         items = list(events)
         if not items:
             return 0
-        self.ensure_lakehouse()
         columns = (
             "event_id",
             "event_timestamp",
@@ -115,16 +128,17 @@ class TrinoService:
         )
         value_group = "(" + ", ".join("?" for _ in columns) + ")"
         total = 0
-        for start in range(0, len(items), self.config.insert_batch_size):
-            batch = items[start : start + self.config.insert_batch_size]
-            params: list = []
-            for event in batch:
-                params.extend(self._event_values(event))
-            sql = f"INSERT INTO {self.config.qualified_table} ({', '.join(columns)}) VALUES " + ", ".join(
-                value_group for _ in batch
-            )
-            self.execute(sql, params)
-            total += len(batch)
+        with self._connection() as connection:
+            for start in range(0, len(items), self.config.insert_batch_size):
+                batch = items[start : start + self.config.insert_batch_size]
+                params: list = []
+                for event in batch:
+                    params.extend(self._event_values(event))
+                sql = f"INSERT INTO {self.config.qualified_table} ({', '.join(columns)}) VALUES " + ", ".join(
+                    value_group for _ in batch
+                )
+                self._execute_on_connection(connection, sql, params)
+                total += len(batch)
         return total
 
     @staticmethod

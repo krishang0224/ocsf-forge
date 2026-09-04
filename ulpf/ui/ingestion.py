@@ -6,6 +6,11 @@ from ulpf.pipeline import events_to_frame, run_pipeline
 from ulpf.sample_data import SAMPLE_LOGS
 
 
+@st.cache_data(show_spinner=False)
+def _cached_pipeline(lines: tuple[str, ...]) -> list:
+    return run_pipeline(lines)
+
+
 def render_ingestion_controls() -> tuple[list, bool]:
     st.markdown("### Add data")
     mode = st.segmented_control("Source", ["Sample", "Upload", "Paste"], default="Sample", label_visibility="collapsed")
@@ -25,7 +30,7 @@ def render_ingestion_controls() -> tuple[list, bool]:
         )
         lines = raw.splitlines() if raw.strip() else []
 
-    events = run_pipeline(lines)
+    events = _cached_pipeline(tuple(lines))
     parsed = sum(event.parse_success for event in events)
     if events:
         st.caption(f"{len(events):,} events · {parsed / len(events):.0%} parsed")

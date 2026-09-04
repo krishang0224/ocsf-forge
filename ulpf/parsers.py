@@ -20,13 +20,15 @@ class LogParserEngine:
     RE_APACHE = re.compile(
         r"^(?P<ip>\S+)\s+\S+\s+(?P<user>\S+)\s+\[(?P<ts>[^]]+)]\s+"
         r'"(?P<method>\S+)\s+(?P<path>\S+)\s+(?P<proto>[^\"]+)"\s+'
-        r"(?P<status>\d{3})\s+(?P<bytes>\d+)(?:\s+\"(?P<ref>[^\"]*)\")?\s+\"(?P<ua>[^\"]*)\""
+        r'(?P<status>\d{3})\s+(?P<bytes>\d+|-)(?:\s+"(?P<ref>[^\"]*)"'
+        r'(?:\s+"(?P<ua>[^\"]*)")?)?$'
     )
     RE_CEF = re.compile(
         r"^CEF:(?P<ver>\d+)\|(?P<vendor>[^|]*)\|(?P<product>[^|]*)\|"
         r"(?P<dversion>[^|]*)\|(?P<sigid>[^|]*)\|(?P<name>[^|]*)\|"
         r"(?P<severity>[^|]*)\|(?P<ext>.*)$"
     )
+    RE_CEF_EXT = re.compile(r"(\S+)=((?:(?!\s+\S+=).)*)")
     LOG4J_SEVERITY = {
         "FATAL": "Critical",
         "ERROR": "High",
@@ -135,9 +137,10 @@ class LogParserEngine:
             "device_product": "httpd",
             "metadata": {
                 "http_status": status,
-                "bytes": int(item["bytes"]),
+                "bytes": int(item["bytes"]) if item["bytes"].isdigit() else None,
                 "path": item["path"],
-                "user_agent": item["ua"],
+                "referer": item.get("ref") or "",
+                "user_agent": item.get("ua") or "",
             },
         }
 
@@ -146,7 +149,7 @@ class LogParserEngine:
         if not match:
             return {"_parsed": False}
         item = match.groupdict()
-        ext = dict(pair.split("=", 1) for pair in item["ext"].split() if "=" in pair)
+        ext = {key: value.strip() for key, value in self.RE_CEF_EXT.findall(item["ext"])}
         try:
             level = int(item["severity"])
             severity = "Critical" if level >= 9 else "High" if level >= 7 else "Medium" if level >= 4 else "Low"

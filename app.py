@@ -5,7 +5,7 @@ import streamlit as st
 from ulpf.config import settings
 from ulpf.services.minio import MinioService
 from ulpf.services.trino import TrinoService
-from ulpf.ui.dashboard import render_dashboard
+from ulpf.ui.dashboard import clear_dashboard_cache, render_dashboard
 from ulpf.ui.ingestion import render_batch_preview, render_ingestion_controls
 from ulpf.ui.sql_console import render_sql_console
 from ulpf.ui.theme import apply_theme
@@ -24,12 +24,17 @@ def services() -> tuple[TrinoService, MinioService]:
     return TrinoService(), MinioService()
 
 
+@st.cache_data(ttl=10, show_spinner=False)
+def stack_status(_trino: TrinoService, _minio: MinioService) -> tuple[tuple[bool, str], dict]:
+    return _trino.health(), _minio.status()
+
+
 trino, minio = services()
-trino_ready, trino_detail = trino.health()
-minio_state = minio.status()
-if trino_ready:
+(trino_ready, trino_detail), minio_state = stack_status(trino, minio)
+if trino_ready and not st.session_state.get("lakehouse_initialized"):
     try:
         trino.ensure_lakehouse()
+        st.session_state["lakehouse_initialized"] = True
     except Exception as exc:
         trino_ready, trino_detail = False, str(exc)
 
@@ -44,7 +49,7 @@ with st.sidebar:
             try:
                 written = trino.insert_events(events)
                 st.success(f"Committed {written:,} events")
-                st.cache_data.clear()
+                clear_dashboard_cache()
             except Exception as exc:
                 st.error("Ingestion failed")
                 with st.expander("Detail"):
@@ -54,11 +59,7 @@ with st.sidebar:
     st.markdown(f"{'🟢' if trino_ready else '🟠'} Trino")
     st.caption(trino_detail if trino_ready else "Waiting for query engine")
     st.markdown(f"{'🟢' if minio_state['ready'] else '🟠'} MinIO")
-    st.caption(
-        f"{minio_state['objects']:,} objects · {minio_state['size_mb']:.2f} MB"
-        if minio_state["ready"]
-        else "Waiting for warehouse"
-    )
+    st.caption("Warehouse bucket available" if minio_state["ready"] else "Waiting for warehouse")
 
 st.markdown('<p class="eyebrow">Security analytics lakehouse</p>', unsafe_allow_html=True)
 st.title("Logs, normalized and queryable")

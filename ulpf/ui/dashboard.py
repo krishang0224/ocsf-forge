@@ -1,5 +1,6 @@
 """Lakehouse metrics and exploratory views."""
 
+import pandas as pd
 import plotly.express as px
 import streamlit as st
 
@@ -7,12 +8,33 @@ from ulpf.services.trino import TrinoService
 from ulpf.sql import OVERVIEW_QUERY, RECENT_QUERY, SERVICE_QUERY, SEVERITY_QUERY
 
 
+@st.cache_data(ttl=10, show_spinner=False)
+def _load_dashboard(_trino: TrinoService) -> dict[str, pd.DataFrame]:
+    return _trino.query_many(
+        {
+            "overview": OVERVIEW_QUERY,
+            "recent": RECENT_QUERY,
+            "severity": SEVERITY_QUERY,
+            "services": SERVICE_QUERY,
+        }
+    )
+
+
+def clear_dashboard_cache() -> None:
+    _load_dashboard.clear()
+
+
+def safe_parse_rate(value) -> float:
+    return 0.0 if value is None or pd.isna(value) else float(value)
+
+
 def render_dashboard(trino: TrinoService) -> None:
     try:
-        overview, _ = trino.query(OVERVIEW_QUERY, enforce_read_only=False)
-        recent, _ = trino.query(RECENT_QUERY, enforce_read_only=False)
-        severity, _ = trino.query(SEVERITY_QUERY, enforce_read_only=False)
-        services, _ = trino.query(SERVICE_QUERY, enforce_read_only=False)
+        data = _load_dashboard(trino)
+        overview = data["overview"]
+        recent = data["recent"]
+        severity = data["severity"]
+        services = data["services"]
     except Exception as exc:
         st.info("The lakehouse is starting. Once Trino and the catalog are ready, current Iceberg data appears here.")
         with st.expander("Connection detail"):
@@ -24,7 +46,8 @@ def render_dashboard(trino: TrinoService) -> None:
     metrics[0].metric("Events", f"{int(row.get('total_events', 0)):,}")
     metrics[1].metric("High / critical", f"{int(row.get('high_critical', 0)):,}")
     metrics[2].metric("Source IPs", f"{int(row.get('unique_source_ips', 0)):,}")
-    metrics[3].metric("Parse rate", f"{float(row.get('parse_rate') or 0):.1f}%")
+    parse_rate = safe_parse_rate(row.get("parse_rate"))
+    metrics[3].metric("Parse rate", f"{parse_rate:.1f}%")
 
     left, right = st.columns([1, 1.65])
     with left:

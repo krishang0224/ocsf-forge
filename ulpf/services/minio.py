@@ -24,12 +24,9 @@ class MinioService:
     def status(self) -> dict:
         try:
             exists = self.client.bucket_exists(self.config.minio_bucket)
-            objects = list(self.client.list_objects(self.config.minio_bucket, recursive=True)) if exists else []
             return {
                 "ready": exists,
-                "objects": len(objects),
-                "size_mb": round(sum(item.size or 0 for item in objects) / 1_048_576, 2),
                 "error": "" if exists else "Warehouse bucket is missing",
             }
         except Exception as exc:
-            return {"ready": False, "objects": 0, "size_mb": 0.0, "error": str(exc)}
+            return {"ready": False, "error": str(exc)}

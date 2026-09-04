@@ -35,7 +35,7 @@ services:
     networks: [lakehouse]
 
   iceberg-rest:
-    image: apache/iceberg-rest-fixture:1.10.1
+    image: docker.io/apache/iceberg-rest-fixture:1.10.1
     depends_on:
       minio-init:
         condition: service_completed_successfully
@@ -52,7 +52,7 @@ services:
     networks: [lakehouse]
 
   trino:
-    image: trinodb/trino:483
+    image: docker.io/trinodb/trino:483
     depends_on:
       - iceberg-rest
     environment:
@@ -61,7 +61,7 @@ services:
     ports:
       - "8080:8080"
     volumes:
-      - ./infra/trino/catalog:/etc/trino/catalog:ro
+      - ./infra/trino/catalog:/etc/trino/catalog:ro,Z
     healthcheck:
       test: ["CMD", "curl", "--fail", "--silent", "http://localhost:8080/v1/info"]
       interval: 10s

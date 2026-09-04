@@ -9,8 +9,8 @@ services:
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
       MINIO_DOMAIN: minio
     ports:
-      - "9000:9000"
-      - "9001:9001"
+      - "127.0.0.1:9000:9000"
+      - "127.0.0.1:9001:9001"
     volumes:
       - minio-data:/data
     restart: unless-stopped
@@ -30,40 +30,97 @@ services:
       /bin/sh -c '
       until mc alias set local http://minio:9000 "$${MINIO_ROOT_USER}" "$${MINIO_ROOT_PASSWORD}"; do sleep 2; done;
       mc mb --ignore-existing local/lakehouse-warehouse;
+      touch /tmp/ready;
+      exec tail -f /dev/null;
       '
-    restart: "no"
+    healthcheck:
+      test: ["CMD", "test", "-f", "/tmp/ready"]
+      interval: 2s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
     networks: [lakehouse]
 
-  iceberg-rest:
-    image: docker.io/apache/iceberg-rest-fixture:1.10.1
-    depends_on:
-      minio-init:
-        condition: service_completed_successfully
+  catalog-db:
+    image: docker.io/postgres:17.6
     environment:
-      AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER:-minioadmin}
-      AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin}
-      AWS_REGION: us-east-1
-      CATALOG_WAREHOUSE: s3://lakehouse-warehouse/
-      CATALOG_IO__IMPL: org.apache.iceberg.aws.s3.S3FileIO
-      CATALOG_S3_ENDPOINT: http://minio:9000
+      POSTGRES_DB: lakekeeper
+      POSTGRES_USER: ${LAKEKEEPER_DB_USER:-lakekeeper}
+      POSTGRES_PASSWORD: ${LAKEKEEPER_DB_PASSWORD:-lakekeeper-local}
+    volumes:
+      - catalog-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 3s
+      timeout: 5s
+      retries: 15
+    restart: unless-stopped
+    networks: [lakehouse]
+
+  lakekeeper:
+    build:
+      context: .
+      dockerfile: infra/lakekeeper/Dockerfile
+    image: ulpf-lakekeeper:0.13.1
+    depends_on:
+      catalog-db:
+        condition: service_healthy
+      minio-init:
+        condition: service_healthy
+    environment:
+      LAKEKEEPER__PG_ENCRYPTION_KEY: ${LAKEKEEPER_ENCRYPTION_KEY:-local-development-key-change-me}
+      LAKEKEEPER__PG_DATABASE_URL_READ: postgresql://${LAKEKEEPER_DB_USER:-lakekeeper}:${LAKEKEEPER_DB_PASSWORD:-lakekeeper-local}@catalog-db:5432/lakekeeper
+      LAKEKEEPER__PG_DATABASE_URL_WRITE: postgresql://${LAKEKEEPER_DB_USER:-lakekeeper}:${LAKEKEEPER_DB_PASSWORD:-lakekeeper-local}@catalog-db:5432/lakekeeper
+      LAKEKEEPER__UI__ENABLE_SURVEYS: "false"
+      RUST_LOG: info
     ports:
-      - "8181:8181"
+      - "127.0.0.1:8181:8181"
+    healthcheck:
+      test: ["CMD", "/home/nonroot/lakekeeper", "healthcheck"]
+      interval: 3s
+      timeout: 10s
+      retries: 15
+      start_period: 5s
+    restart: unless-stopped
+    networks: [lakehouse]
+
+  catalog-init:
+    image: docker.io/curlimages/curl:8.15.0
+    depends_on:
+      lakekeeper:
+        condition: service_healthy
+      minio-init:
+        condition: service_healthy
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
+    entrypoint: ["/bin/sh", "/config/init-catalog.sh"]
+    volumes:
+      - ./infra/lakekeeper/init-catalog.sh:/config/init-catalog.sh:ro,Z
+    healthcheck:
+      test: ["CMD", "test", "-f", "/tmp/ready"]
+      interval: 2s
+      timeout: 3s
+      retries: 10
     restart: unless-stopped
     networks: [lakehouse]
 
   trino:
     image: docker.io/trinodb/trino:483
     depends_on:
-      - iceberg-rest
+      catalog-init:
+        condition: service_healthy
     environment:
       S3_ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}
       S3_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin}
     ports:
-      - "8080:8080"
+      - "127.0.0.1:8080:8080"
     volumes:
       - ./infra/trino/catalog:/etc/trino/catalog:ro,Z
+      - ./infra/trino/access-control.properties:/etc/trino/access-control.properties:ro,Z
+      - ./infra/trino/access-rules.json:/etc/trino/access-rules.json:ro,Z
     healthcheck:
-      test: ["CMD", "curl", "--fail", "--silent", "http://localhost:8080/v1/info"]
+      test: ["CMD-SHELL", "test \"$(curl --fail --silent http://localhost:8080/v1/info/state)\" = '\"ACTIVE\"'"]
       interval: 10s
       timeout: 5s
       retries: 12
@@ -73,14 +130,16 @@ services:
 
   app:
     build: .
-    image: ulpf:2.0
+    image: ulpf:3.0
     depends_on:
       trino:
         condition: service_healthy
     environment:
       TRINO_HOST: trino
       TRINO_PORT: 8080
-      TRINO_USER: ulpf
+      TRINO_USER: ulpf_writer
+      TRINO_READ_USER: ulpf_reader
+      TRINO_DASHBOARD_USER: ulpf_dashboard
       TRINO_CATALOG: iceberg
       TRINO_SCHEMA: logging
       TRINO_TABLE: application_logs
@@ -90,8 +149,9 @@ services:
       MINIO_BUCKET: lakehouse-warehouse
       ULPF_ALLOW_MUTATING_SQL: ${ULPF_ALLOW_MUTATING_SQL:-false}
       ULPF_QUERY_ROW_LIMIT: ${ULPF_QUERY_ROW_LIMIT:-1000}
+      ULPF_MAX_UPLOAD_BYTES: ${ULPF_MAX_UPLOAD_BYTES:-26214400}
     ports:
-      - "8501:8501"
+      - "127.0.0.1:8501:8501"
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8501/_stcore/health')"]
       interval: 20s
@@ -101,8 +161,111 @@ services:
     restart: unless-stopped
     networks: [lakehouse]
 
+  kafka:
+    image: docker.io/apache/kafka:4.3.1
+    profiles: ["streaming"]
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: PLAINTEXT://:19092,CONTROLLER://:9093,EXTERNAL://:9092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:19092,EXTERNAL://localhost:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,EXTERNAL:PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+    volumes:
+      - kafka-data:/var/lib/kafka/data
+    ports:
+      - "127.0.0.1:9092:9092"
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:19092 --list >/dev/null 2>&1"]
+      interval: 5s
+      timeout: 10s
+      retries: 20
+      start_period: 15s
+    restart: unless-stopped
+    networks: [lakehouse]
+
+  kafka-init:
+    image: docker.io/apache/kafka:4.3.1
+    profiles: ["streaming"]
+    depends_on:
+      kafka:
+        condition: service_healthy
+    command:
+      - /bin/sh
+      - -c
+      - >-
+        /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:19092 --create --if-not-exists
+        --topic raw-app-logs --partitions 3 --replication-factor 1 &&
+        /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:19092 --create --if-not-exists
+        --topic ulpf-dead-letter --partitions 1 --replication-factor 1
+        && touch /tmp/ready && exec tail -f /dev/null
+    healthcheck:
+      test: ["CMD", "test", "-f", "/tmp/ready"]
+      interval: 2s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+    networks: [lakehouse]
+
+  stream-worker:
+    build: .
+    image: ulpf:3.0
+    profiles: ["streaming"]
+    command: ["python", "-m", "ulpf.streaming.worker"]
+    depends_on:
+      trino:
+        condition: service_healthy
+      kafka-init:
+        condition: service_healthy
+    environment:
+      TRINO_HOST: trino
+      TRINO_PORT: 8080
+      TRINO_USER: ulpf_writer
+      TRINO_CATALOG: iceberg
+      TRINO_SCHEMA: logging
+      TRINO_TABLE: application_logs
+      KAFKA_BOOTSTRAP_SERVERS: kafka:19092
+      KAFKA_TOPIC: raw-app-logs
+      KAFKA_DEAD_LETTER_TOPIC: ulpf-dead-letter
+      KAFKA_BATCH_SIZE: ${KAFKA_BATCH_SIZE:-500}
+      KAFKA_MAX_POLL_INTERVAL_MS: ${KAFKA_MAX_POLL_INTERVAL_MS:-900000}
+    restart: unless-stopped
+    networks: [lakehouse]
+
+  maintenance:
+    build: .
+    image: ulpf:3.0
+    profiles: ["operations"]
+    command: ["python", "-m", "ulpf.maintenance"]
+    depends_on:
+      trino:
+        condition: service_healthy
+    environment:
+      TRINO_HOST: trino
+      TRINO_PORT: 8080
+      TRINO_USER: ulpf_writer
+      TRINO_CATALOG: iceberg
+      TRINO_SCHEMA: logging
+      TRINO_TABLE: application_logs
+      ULPF_COMPACTION_MIN_FILES: ${ULPF_COMPACTION_MIN_FILES:-50}
+      ULPF_COMPACTION_TARGET_MB: ${ULPF_COMPACTION_TARGET_MB:-128}
+      ULPF_SNAPSHOT_RETENTION_DAYS: ${ULPF_SNAPSHOT_RETENTION_DAYS:-7}
+      ULPF_ORPHAN_RETENTION_DAYS: ${ULPF_ORPHAN_RETENTION_DAYS:-7}
+      ULPF_MAINTENANCE_INTERVAL_SECONDS: ${ULPF_MAINTENANCE_INTERVAL_SECONDS:-86400}
+      ULPF_MAINTENANCE_TABLES: ${ULPF_MAINTENANCE_TABLES:-raw_events,application_logs,quarantine_events,ingestion_runs}
+    restart: unless-stopped
+    networks: [lakehouse]
+
 networks:
   lakehouse:
 
 volumes:
   minio-data:
+  catalog-data:
+  kafka-data:

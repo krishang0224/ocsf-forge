@@ -1,5 +1,7 @@
 """ULPF web entrypoint. Product logic lives in the ulpf package."""
 
+from dataclasses import replace
+
 import streamlit as st
 
 from ulpf.config import settings
@@ -20,8 +22,11 @@ apply_theme()
 
 
 @st.cache_resource
-def services() -> tuple[TrinoService, MinioService]:
-    return TrinoService(), MinioService()
+def services() -> tuple[TrinoService, TrinoService, TrinoService, MinioService]:
+    writer = TrinoService()
+    reader = TrinoService(replace(settings, trino_user=settings.trino_read_user, trino_password=""))
+    dashboard = TrinoService(replace(settings, trino_user=settings.trino_dashboard_user, trino_password=""))
+    return writer, reader, dashboard, MinioService()
 
 
 @st.cache_data(ttl=10, show_spinner=False)
@@ -29,11 +34,11 @@ def stack_status(_trino: TrinoService, _minio: MinioService) -> tuple[tuple[bool
     return _trino.health(), _minio.status()
 
 
-trino, minio = services()
-(trino_ready, trino_detail), minio_state = stack_status(trino, minio)
+writer, reader, dashboard, minio = services()
+(trino_ready, trino_detail), minio_state = stack_status(dashboard, minio)
 if trino_ready and not st.session_state.get("lakehouse_initialized"):
     try:
-        trino.ensure_lakehouse()
+        writer.ensure_lakehouse()
         st.session_state["lakehouse_initialized"] = True
     except Exception as exc:
         trino_ready, trino_detail = False, str(exc)
@@ -47,8 +52,11 @@ with st.sidebar:
     if ingest_clicked:
         with st.spinner("Committing an atomic Iceberg snapshot…"):
             try:
-                written = trino.insert_events(events)
-                st.success(f"Committed {written:,} events")
+                result = writer.ingest_events(events)
+                st.success(
+                    f"Run complete · {result.committed:,} committed · "
+                    f"{result.quarantined:,} quarantined · {result.duplicates:,} duplicates skipped"
+                )
                 clear_dashboard_cache()
             except Exception as exc:
                 st.error("Ingestion failed")
@@ -68,29 +76,29 @@ st.caption("OCSF-aligned events · Apache Iceberg snapshots · MinIO object stor
 tab_data, tab_ingest, tab_sql, tab_about = st.tabs(["Current data", "Batch preview", "SQL workspace", "Architecture"])
 with tab_data:
     if trino_ready:
-        render_dashboard(trino)
+        render_dashboard(dashboard)
     else:
         st.info("The lakehouse is starting. Current Iceberg data will appear when Trino is ready.")
 with tab_ingest:
     render_batch_preview(events)
 with tab_sql:
-    render_sql_console(trino)
+    render_sql_console(reader)
 with tab_about:
     st.subheader("End-to-end data path")
     st.code(
-        "Raw JSON / Syslog / CEF / Access logs\n"
+        "Files / Kafka · JSON / Syslog / CEF / LEEF / XML / CSV\n"
         "        │\n"
         "        ▼\n"
-        "ULPF parser + OCSF normalizer\n"
-        "        │  parameterized INSERT\n"
+        "Immutable raw events ─── failures ───▶ Quarantine\n"
+        "        │ parser registry + OCSF validation\n"
         "        ▼\n"
-        "Apache Trino ───── metadata ─────▶ Iceberg REST Catalog\n"
+        "Normalized events ─── Trino ─────▶ Lakekeeper REST Catalog\n"
         "        │                              │\n"
         "        └──── Parquet + metadata ─────▶ MinIO",
         language="text",
     )
     st.markdown(
-        "The application submits normalized batches to Trino. The Iceberg connector coordinates atomic snapshots through the REST catalog and stores Parquet data and metadata in the persistent MinIO warehouse."
+        "Every record first enters an immutable raw table. Valid OCSF events are merged idempotently into the normalized table; failures enter quarantine with parser and validation details. Lakekeeper persists catalog state in PostgreSQL while MinIO retains Parquet and Iceberg metadata."
     )
     st.markdown("**Safety defaults**")
     st.markdown(

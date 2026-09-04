@@ -1,0 +1,41 @@
+{
+  "catalogs": [
+    {"user": "ulpf_writer", "catalog": "iceberg", "allow": "all"},
+    {"user": "ulpf_writer", "catalog": "system", "allow": "read-only"},
+    {"user": "ulpf_reader", "catalog": "iceberg", "allow": "read-only"},
+    {"user": "ulpf_reader", "catalog": "system", "allow": "read-only"},
+    {"user": "ulpf_dashboard", "catalog": "iceberg", "allow": "read-only"},
+    {"user": "ulpf_dashboard", "catalog": "system", "allow": "read-only"},
+    {"catalog": ".*", "allow": "none"}
+  ],
+  "tables": [
+    {
+      "user": "ulpf_writer",
+      "catalog": "iceberg",
+      "schema": "logging",
+      "table": ".*",
+      "privileges": ["SELECT", "INSERT", "DELETE", "UPDATE", "OWNERSHIP"]
+    },
+    {
+      "user": "ulpf_dashboard",
+      "catalog": "iceberg",
+      "schema": "logging",
+      "table": ".*",
+      "privileges": ["SELECT"]
+    },
+    {
+      "user": "ulpf_reader",
+      "catalog": "iceberg",
+      "schema": "logging",
+      "table": "application_logs|ingestion_runs",
+      "privileges": ["SELECT"]
+    },
+    {
+      "user": "ulpf_reader",
+      "catalog": "iceberg",
+      "schema": "logging",
+      "table": ".*",
+      "privileges": []
+    }
+  ]
+}

@@ -1,27 +1,43 @@
-"""Ingestion controls and batch preview."""
+"""Bounded interactive ingestion and normalized batch preview."""
+
+import hashlib
+import json
 
 import streamlit as st
 
-from ulpf.pipeline import events_to_frame, run_pipeline
+from ulpf.config import settings
+from ulpf.pipeline import events_to_frame, run_payload, run_pipeline
 from ulpf.sample_data import SAMPLE_LOGS
 
 
-@st.cache_data(show_spinner=False)
-def _cached_pipeline(lines: tuple[str, ...]) -> list:
-    return run_pipeline(lines)
+@st.cache_data(show_spinner=False, max_entries=12)
+def _cached_lines(lines: tuple[str, ...], source_id: str, source_name: str) -> list:
+    return run_pipeline(lines, source_id=source_id, source_name=source_name)
+
+
+@st.cache_data(show_spinner=False, max_entries=6)
+def _cached_payload(payload: bytes, filename: str) -> list:
+    return run_payload(payload, filename)
 
 
 def render_ingestion_controls() -> tuple[list, bool]:
     st.markdown("### Add data")
     mode = st.segmented_control("Source", ["Sample", "Upload", "Paste"], default="Sample", label_visibility="collapsed")
-    lines: list[str] = []
+    events: list = []
     if mode == "Sample":
-        lines = SAMPLE_LOGS
-        st.caption(f"{len(lines)} representative events ready")
+        st.caption(f"{len(SAMPLE_LOGS)} representative events ready")
+        events = _cached_lines(tuple(SAMPLE_LOGS), "bundled-sample-v1", "Bundled sample")
     elif mode == "Upload":
-        upload = st.file_uploader("JSONL or log file", type=["json", "jsonl", "log", "txt"])
+        upload = st.file_uploader("Log document", type=["json", "jsonl", "log", "txt", "csv", "xml"])
         if upload:
-            lines = upload.read().decode("utf-8", errors="replace").splitlines()
+            payload = upload.getvalue()
+            if len(payload) > settings.max_upload_bytes:
+                st.error(
+                    f"Upload exceeds the {settings.max_upload_bytes / 1_048_576:.0f} MB interactive limit. "
+                    "Use Kafka for larger feeds."
+                )
+            else:
+                events = _cached_payload(payload, upload.name)
     else:
         raw = st.text_area(
             "One event per line",
@@ -29,11 +45,12 @@ def render_ingestion_controls() -> tuple[list, bool]:
             placeholder='{"timestamp":"2026-01-01T10:00:00Z","level":"error","message":"..."}',
         )
         lines = raw.splitlines() if raw.strip() else []
+        source_id = hashlib.sha256(raw.encode()).hexdigest() if raw else "paste-empty"
+        events = _cached_lines(tuple(lines), source_id, "Pasted events")
 
-    events = _cached_pipeline(tuple(lines))
     parsed = sum(event.parse_success for event in events)
     if events:
-        st.caption(f"{len(events):,} events · {parsed / len(events):.0%} parsed")
+        st.caption(f"{len(events):,} events · {parsed:,} ready · {len(events) - parsed:,} quarantine")
     ingest = st.button("Ingest into Iceberg", type="primary", width="stretch", disabled=not events)
     return events, ingest
 
@@ -49,17 +66,20 @@ def render_batch_preview(events: list) -> None:
         "severity",
         "device_product",
         "source_format",
+        "parser_name",
+        "class_name",
+        "activity_name",
         "src_endpoint_ip",
         "user",
-        "action",
         "message",
         "parse_success",
+        "parse_notes",
     ]
     st.dataframe(frame[columns], width="stretch", height=420, hide_index=True)
     left, right = st.columns(2)
     left.download_button(
         "Download JSONL",
-        "\n".join(event.to_json().replace("\n", "") for event in events),
+        "\n".join(json.dumps(event.to_ocsf_dict(), separators=(",", ":"), default=str) for event in events),
         "normalized_logs.jsonl",
         "application/x-ndjson",
         width="stretch",

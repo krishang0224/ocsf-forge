@@ -1,4 +1,5 @@
--- Schedule these operations during quiet periods. Tune thresholds to workload.
+-- Reference commands used by ulpf.maintenance. The scheduler first inspects
+-- application_logs$files and only compacts when file-count and size thresholds fire.
 ALTER TABLE iceberg.logging.application_logs
 EXECUTE optimize(file_size_threshold => '128MB');
 

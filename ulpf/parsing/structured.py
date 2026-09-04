@@ -3,6 +3,42 @@
 import json
 from datetime import datetime
 
+MAPPED_FIELDS = {
+    "@timestamp",
+    "action",
+    "actor",
+    "app",
+    "client_ip",
+    "client_port",
+    "destination_ip",
+    "destination_port",
+    "dst_ip",
+    "dst_port",
+    "event",
+    "event_type",
+    "host",
+    "hostname",
+    "ip",
+    "level",
+    "message",
+    "operation",
+    "risk",
+    "server",
+    "server_port",
+    "service",
+    "severity",
+    "source",
+    "source_ip",
+    "source_port",
+    "src_ip",
+    "src_port",
+    "time",
+    "timestamp",
+    "user",
+    "username",
+    "vendor",
+}
+
 
 def structured_record(item: dict, observed_at: datetime) -> dict:
     raw_severity = str(item.get("severity", item.get("level", item.get("risk", "Informational")))).lower()
@@ -41,7 +77,7 @@ def structured_record(item: dict, observed_at: datetime) -> dict:
         "dst_endpoint_port": item.get("dst_port", item.get("destination_port", item.get("server_port"))),
         "device_vendor": item.get("vendor", "Application"),
         "device_product": item.get("service", item.get("app", "application")),
-        "metadata": item,
+        "metadata": {key: value for key, value in item.items() if key not in MAPPED_FIELDS},
         "ocsf_class": "Authentication" if is_auth else "API Activity",
         "class_uid": 3002 if is_auth else 6003,
         "category": "Identity & Access Management" if is_auth else "Application Activity",

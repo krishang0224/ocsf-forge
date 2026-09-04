@@ -32,3 +32,9 @@ Align retention with incident-response and compliance requirements before shorte
 ## Monitoring
 
 Alert on failed or stale ingestion runs, falling parser success rate, quarantine growth, Kafka consumer lag, unavailable Trino/Lakekeeper/MinIO health, excessive Iceberg data files, and backup age. The dashboard exposes parser quality, recent runs, snapshot count, file count, and average file size for initial operations.
+
+## Ingestion tuning
+
+`ULPF_INSERT_BATCH_SIZE` limits rows per Iceberg merge, while `ULPF_TRINO_MAX_QUERY_BYTES` also splits batches according to their encoded parameter size. Keep the latter below Trino's configured query-text limit; the default 850,000-byte safety ceiling is intended for the stock 1 MB limit. `ULPF_ICEBERG_COMMIT_RETRIES` controls bounded exponential backoff when concurrent writers conflict on an Iceberg partition. Read-only console results are fetched only up to `ULPF_QUERY_ROW_LIMIT`, rather than loading an unbounded result into application memory.
+
+The local Trino container is capped at a 4 GB Java heap in `infra/trino/jvm.config`. Size this explicitly for production instead of inheriting the container default, which can reserve most of the host's memory.

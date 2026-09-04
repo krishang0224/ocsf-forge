@@ -2,7 +2,8 @@
 
 import json
 import os
-import time
+import signal
+import threading
 from datetime import UTC, datetime
 
 from ulpf.services.trino import TrinoService
@@ -58,14 +59,21 @@ def run_once(service: TrinoService | None = None) -> dict:
 
 def main() -> None:
     interval = max(3600, int(os.getenv("ULPF_MAINTENANCE_INTERVAL_SECONDS", "86400")))
-    while True:
+    stopped = threading.Event()
+
+    def stop(*_args) -> None:
+        stopped.set()
+
+    signal.signal(signal.SIGTERM, stop)
+    signal.signal(signal.SIGINT, stop)
+    while not stopped.is_set():
         delay = interval
         try:
             print(json.dumps(run_once(), separators=(",", ":")), flush=True)
         except Exception as exc:
             print(json.dumps({"timestamp": datetime.now(UTC).isoformat(), "error": str(exc)}), flush=True)
             delay = min(60, interval)
-        time.sleep(delay)
+        stopped.wait(delay)
 
 
 if __name__ == "__main__":

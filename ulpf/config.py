@@ -29,7 +29,9 @@ class Settings:
     minio_bucket: str = os.getenv("MINIO_BUCKET", "lakehouse-warehouse")
     allow_mutating_sql: bool = _flag("ULPF_ALLOW_MUTATING_SQL")
     query_row_limit: int = int(os.getenv("ULPF_QUERY_ROW_LIMIT", "1000"))
-    insert_batch_size: int = int(os.getenv("ULPF_INSERT_BATCH_SIZE", "250"))
+    insert_batch_size: int = int(os.getenv("ULPF_INSERT_BATCH_SIZE", "500"))
+    trino_max_query_bytes: int = int(os.getenv("ULPF_TRINO_MAX_QUERY_BYTES", "850000"))
+    iceberg_commit_retries: int = int(os.getenv("ULPF_ICEBERG_COMMIT_RETRIES", "6"))
     max_upload_bytes: int = int(os.getenv("ULPF_MAX_UPLOAD_BYTES", str(25 * 1024 * 1024)))
 
     @property

@@ -7,7 +7,7 @@ from datetime import UTC, datetime
 
 from kafka import KafkaConsumer, KafkaProducer
 
-from ulpf.pipeline import run_pipeline
+from ulpf.pipeline import EventProcessor
 from ulpf.services.trino import TrinoService
 
 
@@ -39,6 +39,7 @@ def main() -> None:
         enable_idempotence=True,
     )
     trino = TrinoService()
+    processor = EventProcessor()
     trino.ensure_lakehouse()
     try:
         while running:
@@ -50,7 +51,7 @@ def main() -> None:
             for record in records:
                 observed = datetime.fromtimestamp(record.timestamp / 1000, UTC)
                 source_id = f"kafka:{record.topic}:{record.partition}"
-                event = run_pipeline(
+                event = processor.run(
                     [record.value.decode("utf-8", errors="replace")],
                     source_id=source_id,
                     source_name=record.topic,

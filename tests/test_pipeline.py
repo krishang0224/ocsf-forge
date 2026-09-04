@@ -135,6 +135,15 @@ def test_pipeline_accepts_a_text_payload_without_iterating_characters():
     assert [event.message for event in events] == ["one", "two"]
 
 
+def test_structured_metadata_keeps_only_unmapped_vendor_fields():
+    event = run_pipeline(
+        ['{"timestamp":"2026-09-04T00:00:00Z","message":"one","src_ip":"10.0.0.1","vendor_code":"A17"}']
+    )[0]
+    assert event.metadata["vendor_code"] == "A17"
+    assert "message" not in event.metadata
+    assert "src_ip" not in event.metadata
+
+
 @pytest.mark.parametrize(
     ("filename", "payload", "expected_format"),
     [

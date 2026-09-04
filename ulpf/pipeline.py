@@ -39,33 +39,66 @@ def run_pipeline(
     observed_at: datetime | None = None,
     forced_format: str | None = None,
 ) -> list[NormalizedEvent]:
-    if isinstance(lines, str):
-        lines = lines.splitlines()
-    parser = LogParserEngine()
-    normalizer = OCSFNormalizer()
-    observed = observed_at or datetime.now(UTC)
-    events: list[NormalizedEvent] = []
-    for offset, line in _logical_events(lines):
-        if forced_format:
-            fmt, parser_name, parser_version, confidence, parsed = parser.registry.parse(line, observed, forced_format)
-            parsed.update(
-                {"_parser_name": parser_name, "_parser_version": parser_version, "_detection_confidence": confidence}
+    return EventProcessor().run(
+        lines,
+        source_id=source_id,
+        source_name=source_name,
+        source_offset_start=source_offset_start,
+        ingestion_run_id=ingestion_run_id,
+        observed_at=observed_at,
+        forced_format=forced_format,
+    )
+
+
+class EventProcessor:
+    """Reusable parser and normalizer for long-running ingestion workers."""
+
+    def __init__(self) -> None:
+        self.parser = LogParserEngine()
+        self.normalizer = OCSFNormalizer()
+
+    def run(
+        self,
+        lines: str | list[str] | tuple[str, ...],
+        *,
+        source_id: str = "interactive",
+        source_name: str = "",
+        source_offset_start: int = 0,
+        ingestion_run_id: str = "",
+        observed_at: datetime | None = None,
+        forced_format: str | None = None,
+    ) -> list[NormalizedEvent]:
+        if isinstance(lines, str):
+            lines = lines.splitlines()
+        observed = observed_at or datetime.now(UTC)
+        events: list[NormalizedEvent] = []
+        for offset, line in _logical_events(lines):
+            if forced_format:
+                fmt, parser_name, parser_version, confidence, parsed = self.parser.registry.parse(
+                    line, observed, forced_format
+                )
+                parsed.update(
+                    {
+                        "_parser_name": parser_name,
+                        "_parser_version": parser_version,
+                        "_detection_confidence": confidence,
+                    }
+                )
+            else:
+                fmt, parsed = self.parser.parse_line(line, observed)
+            events.append(
+                self.normalizer.normalize(
+                    line,
+                    fmt,
+                    parsed,
+                    observed_at=observed,
+                    source_id=source_id,
+                    source_offset=source_offset_start + offset,
+                    source_name=source_name,
+                    ingestion_run_id=ingestion_run_id,
+                )
             )
-        else:
-            fmt, parsed = parser.parse_line(line, observed)
-        events.append(
-            normalizer.normalize(
-                line,
-                fmt,
-                parsed,
-                observed_at=observed,
-                source_id=source_id,
-                source_offset=source_offset_start + offset,
-                source_name=source_name,
-                ingestion_run_id=ingestion_run_id,
-            )
-        )
-    return events
+        return events
 
 
 def run_payload(payload: bytes, filename: str = "upload.log", source_id: str | None = None) -> list[NormalizedEvent]:

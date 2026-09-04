@@ -21,10 +21,10 @@ class RecordingTrino(TrinoService):
         self.connections += 1
         yield object()
 
-    def _execute_on_connection(self, connection, statement, params=None):
+    def _execute_on_connection(self, connection, statement, params=None, row_limit=None):
         self.calls.append((statement, params))
-        if statement.startswith("MERGE INTO"):
-            table = next(name for name in self.counts if name in statement)
+        table = next((name for name in self.counts if name in statement), None)
+        if statement.startswith("MERGE INTO") and table:
             column_count = {
                 "raw_events": len(self.raw_columns()),
                 "application_logs": len(self.normalized_columns()),
@@ -103,3 +103,48 @@ def test_query_bundle_reuses_one_connection():
     results = client.query_many({"first": "SELECT 1", "second": "SELECT 2"})
     assert client.connections == 1
     assert set(results) == {"first", "second"}
+
+
+def test_large_batches_are_split_by_estimated_query_text_size():
+    client = RecordingTrino(
+        replace(settings, insert_batch_size=100, trino_max_query_bytes=12_000)
+    )
+    events = run_pipeline(
+        [f'{{"timestamp":"2025-01-01T00:00:00Z","message":"{index}-' + ('x' * 500) + '"}' for index in range(8)],
+        source_id="query-size-test",
+    )
+    assert client.insert_events(events) == 8
+    normalized_merges = [call for call in client.calls if "MERGE INTO iceberg.logging.application_logs" in call[0]]
+    assert len(normalized_merges) > 1
+
+
+def test_iceberg_commit_conflicts_are_retried(monkeypatch):
+    class ConflictTrino(RecordingTrino):
+        remaining_conflicts = 2
+
+        def _execute_on_connection(self, connection, statement, params=None, row_limit=None):
+            if "MERGE INTO iceberg.logging.application_logs" in statement and self.remaining_conflicts:
+                self.remaining_conflicts -= 1
+                raise RuntimeError("ICEBERG_COMMIT_ERROR: concurrent writer")
+            return super()._execute_on_connection(connection, statement, params, row_limit)
+
+    monkeypatch.setattr("ulpf.services.trino.sleep", lambda _seconds: None)
+    client = ConflictTrino(replace(settings, iceberg_commit_retries=2))
+    events = run_pipeline(['{"timestamp":"2025-01-01T00:00:00Z","message":"retry"}'])
+    assert client.insert_events(events) == 1
+    assert client.remaining_conflicts == 0
+
+
+def test_oversized_single_event_fails_before_event_tables_are_written():
+    client = RecordingTrino(replace(settings, trino_max_query_bytes=10_000))
+    event = run_pipeline(
+        ['{"timestamp":"2025-01-01T00:00:00Z","message":"' + ("x" * 20_000) + '"}']
+    )[0]
+    with pytest.raises(ValueError, match="single event is too large"):
+        client.ingest_events([event])
+    event_merges = [
+        statement
+        for statement, _params in client.calls
+        if statement.startswith("MERGE INTO") and "ingestion_runs" not in statement
+    ]
+    assert event_merges == []

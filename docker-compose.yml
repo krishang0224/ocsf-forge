@@ -119,6 +119,7 @@ services:
       - ./infra/trino/catalog:/etc/trino/catalog:ro,Z
       - ./infra/trino/access-control.properties:/etc/trino/access-control.properties:ro,Z
       - ./infra/trino/access-rules.json:/etc/trino/access-rules.json:ro,Z
+      - ./infra/trino/jvm.config:/etc/trino/jvm.config:ro,Z
     healthcheck:
       test: ["CMD-SHELL", "test \"$(curl --fail --silent http://localhost:8080/v1/info/state)\" = '\"ACTIVE\"'"]
       interval: 10s
@@ -149,6 +150,9 @@ services:
       MINIO_BUCKET: lakehouse-warehouse
       ULPF_ALLOW_MUTATING_SQL: ${ULPF_ALLOW_MUTATING_SQL:-false}
       ULPF_QUERY_ROW_LIMIT: ${ULPF_QUERY_ROW_LIMIT:-1000}
+      ULPF_INSERT_BATCH_SIZE: ${ULPF_INSERT_BATCH_SIZE:-500}
+      ULPF_TRINO_MAX_QUERY_BYTES: ${ULPF_TRINO_MAX_QUERY_BYTES:-850000}
+      ULPF_ICEBERG_COMMIT_RETRIES: ${ULPF_ICEBERG_COMMIT_RETRIES:-6}
       ULPF_MAX_UPLOAD_BYTES: ${ULPF_MAX_UPLOAD_BYTES:-26214400}
     ports:
       - "127.0.0.1:8501:8501"
@@ -235,6 +239,14 @@ services:
       KAFKA_DEAD_LETTER_TOPIC: ulpf-dead-letter
       KAFKA_BATCH_SIZE: ${KAFKA_BATCH_SIZE:-500}
       KAFKA_MAX_POLL_INTERVAL_MS: ${KAFKA_MAX_POLL_INTERVAL_MS:-900000}
+      ULPF_INSERT_BATCH_SIZE: ${ULPF_INSERT_BATCH_SIZE:-500}
+      ULPF_TRINO_MAX_QUERY_BYTES: ${ULPF_TRINO_MAX_QUERY_BYTES:-850000}
+      ULPF_ICEBERG_COMMIT_RETRIES: ${ULPF_ICEBERG_COMMIT_RETRIES:-6}
+    healthcheck:
+      test: ["CMD-SHELL", "kill -0 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
     restart: unless-stopped
     networks: [lakehouse]
 
@@ -259,6 +271,11 @@ services:
       ULPF_ORPHAN_RETENTION_DAYS: ${ULPF_ORPHAN_RETENTION_DAYS:-7}
       ULPF_MAINTENANCE_INTERVAL_SECONDS: ${ULPF_MAINTENANCE_INTERVAL_SECONDS:-86400}
       ULPF_MAINTENANCE_TABLES: ${ULPF_MAINTENANCE_TABLES:-raw_events,application_logs,quarantine_events,ingestion_runs}
+    healthcheck:
+      test: ["CMD-SHELL", "kill -0 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
     restart: unless-stopped
     networks: [lakehouse]
 

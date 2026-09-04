@@ -1,12 +1,14 @@
 """Trino gateway for safe queries and recoverable Iceberg ingestion."""
 
 import json
+import logging
+import random
 import re
 import uuid
 from collections.abc import Callable, Iterable
 from dataclasses import replace
 from datetime import UTC, datetime
-from time import perf_counter
+from time import perf_counter, sleep
 
 import pandas as pd
 from trino.dbapi import connect
@@ -21,6 +23,8 @@ MUTATING_KEYWORDS = re.compile(
     r"\b(INSERT|UPDATE|DELETE|MERGE|CREATE|DROP|ALTER|TRUNCATE|CALL|GRANT|REVOKE|SET|RESET|USE)\b",
     re.IGNORECASE,
 )
+COMMIT_CONFLICT_MARKERS = ("ICEBERG_COMMIT_ERROR", "TRANSACTION_CONFLICT")
+LOGGER = logging.getLogger(__name__)
 
 
 class UnsafeQueryError(ValueError):
@@ -57,15 +61,25 @@ class TrinoService:
             for statement in LAKEHOUSE_SETUP:
                 self._execute_on_connection(connection, statement)
 
-    def execute(self, statement: str, params: list | tuple | None = None) -> tuple[list[str], list[list]]:
+    def execute(
+        self,
+        statement: str,
+        params: list | tuple | None = None,
+        row_limit: int | None = None,
+    ) -> tuple[list[str], list[list]]:
         with self._connection() as connection:
-            return self._execute_on_connection(connection, statement, params)
+            return self._execute_on_connection(connection, statement, params, row_limit)
 
     @staticmethod
-    def _execute_on_connection(connection, statement: str, params: list | tuple | None = None):
+    def _execute_on_connection(
+        connection,
+        statement: str,
+        params: list | tuple | None = None,
+        row_limit: int | None = None,
+    ):
         cursor = connection.cursor()
         cursor.execute(statement, params)
-        rows = cursor.fetchall()
+        rows = cursor.fetchmany(row_limit) if row_limit is not None else cursor.fetchall()
         columns = [column[0] for column in cursor.description] if cursor.description else []
         return columns, rows
 
@@ -81,18 +95,20 @@ class TrinoService:
         if enforce_read_only and not self.config.allow_mutating_sql and not is_read_only:
             raise UnsafeQueryError("This console is read-only. Set ULPF_ALLOW_MUTATING_SQL=true to enable DDL and DML.")
         started = perf_counter()
-        columns, rows = self.execute(sql)
+        columns, rows = self.execute(sql, row_limit=self.config.query_row_limit)
         elapsed = perf_counter() - started
         if columns:
-            return pd.DataFrame(rows[: self.config.query_row_limit], columns=columns), elapsed
+            return pd.DataFrame(rows, columns=columns), elapsed
         return pd.DataFrame({"status": ["Statement completed"]}), elapsed
 
     def query_many(self, statements: dict[str, str]) -> dict[str, pd.DataFrame]:
         results: dict[str, pd.DataFrame] = {}
         with self._connection() as connection:
             for name, statement in statements.items():
-                columns, rows = self._execute_on_connection(connection, statement)
-                results[name] = pd.DataFrame(rows[: self.config.query_row_limit], columns=columns)
+                columns, rows = self._execute_on_connection(
+                    connection, statement, row_limit=self.config.query_row_limit
+                )
+                results[name] = pd.DataFrame(rows, columns=columns)
         return results
 
     def insert_events(self, events: Iterable[NormalizedEvent]) -> int:
@@ -106,8 +122,10 @@ class TrinoService:
         run_id = str(uuid.uuid4())
         items = [replace(event, ingestion_run_id=run_id) for event in items]
         started_at = datetime.now(UTC)
-        source_id = items[0].source_id
-        source_name = items[0].source_name or "interactive"
+        source_ids = {event.source_id for event in items}
+        source_names = {event.source_name or "interactive" for event in items}
+        source_id = next(iter(source_ids)) if len(source_ids) == 1 else "multiple"
+        source_name = next(iter(source_names)) if len(source_names) == 1 else "multiple"
         formats = {event.source_format for event in items}
         source_type = next(iter(formats)) if len(formats) == 1 else "mixed"
         initial = (
@@ -129,11 +147,21 @@ class TrinoService:
         try:
             with self._connection() as connection:
                 self._insert_run(connection, initial)
+                valid = [event for event in items if event.parse_success]
+                invalid = [event for event in items if not event.parse_success]
+                self._assert_events_fit("iceberg.logging.raw_events", self.raw_columns(), items, self._raw_values)
+                self._assert_events_fit(
+                    self.config.qualified_table, self.normalized_columns(), valid, self._event_values
+                )
+                self._assert_events_fit(
+                    "iceberg.logging.quarantine_events",
+                    self.quarantine_columns(),
+                    invalid,
+                    self._quarantine_values,
+                )
                 self._merge_batches(
                     connection, "iceberg.logging.raw_events", self.raw_columns(), items, self._raw_values
                 )
-                valid = [event for event in items if event.parse_success]
-                invalid = [event for event in items if not event.parse_success]
                 self._merge_batches(
                     connection,
                     self.config.qualified_table,
@@ -259,18 +287,77 @@ class TrinoService:
         values: Callable[[NormalizedEvent], tuple],
     ) -> None:
         value_group = "(" + ", ".join("?" for _ in columns) + ")"
-        for start in range(0, len(events), self.config.insert_batch_size):
-            batch = events[start : start + self.config.insert_batch_size]
-            params = [value for event in batch for value in values(event)]
-            aliases = ", ".join(columns)
-            source_values = ", ".join(value_group for _ in batch)
-            inserts = ", ".join(f"source.{column}" for column in columns)
-            statement = (
-                f"MERGE INTO {table} AS target USING (VALUES {source_values}) AS source ({aliases}) "
-                "ON target.event_id = source.event_id "
-                f"WHEN NOT MATCHED THEN INSERT ({aliases}) VALUES ({inserts})"
+        aliases = ", ".join(columns)
+        inserts = ", ".join(f"source.{column}" for column in columns)
+        fixed_size = len(table) + len(aliases) * 2 + len(inserts) + 256
+        batch: list[tuple] = []
+        estimated_size = fixed_size
+        for event in events:
+            event_values = values(event)
+            event_size = len(value_group) + sum(self._prepared_value_size(value) + 1 for value in event_values)
+            if event_size + fixed_size > self.config.trino_max_query_bytes:
+                raise ValueError(
+                    "A single event is too large for safe Trino parameter binding; "
+                    "reduce the record size or store its payload externally."
+                )
+            if batch and (
+                len(batch) >= self.config.insert_batch_size
+                or estimated_size + event_size > self.config.trino_max_query_bytes
+            ):
+                self._merge_batch(connection, table, columns, batch, aliases, inserts, value_group)
+                batch = []
+                estimated_size = fixed_size
+            batch.append(event_values)
+            estimated_size += event_size
+        if batch:
+            self._merge_batch(connection, table, columns, batch, aliases, inserts, value_group)
+
+    def _assert_events_fit(self, table, columns, events, values) -> None:
+        value_group_size = len(columns) * 3 + 2
+        fixed_size = len(table) + len(", ".join(columns)) * 2 + 512
+        for event in events:
+            event_size = value_group_size + sum(
+                self._prepared_value_size(value) + 1 for value in values(event)
             )
-            self._execute_on_connection(connection, statement, params)
+            if event_size + fixed_size > self.config.trino_max_query_bytes:
+                raise ValueError(
+                    "A single event is too large for safe Trino parameter binding; "
+                    "reduce the record size or store its payload externally."
+                )
+
+    def _merge_batch(self, connection, table, columns, batch, aliases, inserts, value_group) -> None:
+        params = [value for event_values in batch for value in event_values]
+        source_values = ", ".join(value_group for _ in batch)
+        statement = (
+            f"MERGE INTO {table} AS target USING (VALUES {source_values}) AS source ({aliases}) "
+            "ON target.event_id = source.event_id "
+            f"WHEN NOT MATCHED THEN INSERT ({aliases}) VALUES ({inserts})"
+        )
+        self._execute_write_on_connection(connection, statement, params)
+
+    @staticmethod
+    def _prepared_value_size(value) -> int:
+        """Conservatively estimate trino-python-client's EXECUTE IMMEDIATE text."""
+        if value is None:
+            return 4
+        if isinstance(value, str):
+            return len(value.encode("utf-8")) + value.count("'") + 2
+        if isinstance(value, datetime):
+            return 48
+        return len(str(value).encode("utf-8")) + 12
+
+    def _execute_write_on_connection(self, connection, statement, params=None):
+        for attempt in range(self.config.iceberg_commit_retries + 1):
+            try:
+                return self._execute_on_connection(connection, statement, params)
+            except Exception as exc:
+                if not any(marker in str(exc) for marker in COMMIT_CONFLICT_MARKERS):
+                    raise
+                if attempt >= self.config.iceberg_commit_retries:
+                    raise
+                delay = min(0.2 * (2**attempt), 3.0) + random.uniform(0.0, 0.2)
+                LOGGER.warning("Iceberg commit conflict; retrying in %.2fs", delay)
+                sleep(delay)
 
     def _insert_run(self, connection, values: tuple) -> None:
         columns = (
@@ -289,11 +376,18 @@ class TrinoService:
             "snapshot_id",
             "error_message",
         )
-        statement = f"INSERT INTO iceberg.logging.ingestion_runs ({', '.join(columns)}) VALUES ({', '.join('?' for _ in columns)})"
-        self._execute_on_connection(connection, statement, values)
+        aliases = ", ".join(columns)
+        inserts = ", ".join(f"source.{column}" for column in columns)
+        statement = (
+            f"MERGE INTO iceberg.logging.ingestion_runs AS target "
+            f"USING (VALUES ({', '.join('?' for _ in columns)})) AS source ({aliases}) "
+            "ON target.run_id = source.run_id "
+            f"WHEN NOT MATCHED THEN INSERT ({aliases}) VALUES ({inserts})"
+        )
+        self._execute_write_on_connection(connection, statement, values)
 
     def _finish_run(self, connection, run_id, status, committed, quarantined, duplicates, snapshot_id, error) -> None:
-        self._execute_on_connection(
+        self._execute_write_on_connection(
             connection,
             """UPDATE iceberg.logging.ingestion_runs
                SET completed_at = ?, status = ?, committed_count = ?, quarantined_count = ?,

@@ -33,4 +33,8 @@ case "$warehouse_status" in
 esac
 
 touch /tmp/ready
-exec tail -f /dev/null
+trap 'exit 0' TERM INT
+while true; do
+  sleep 3600 &
+  wait $!
+done

@@ -31,7 +31,8 @@ services:
       until mc alias set local http://minio:9000 "$${MINIO_ROOT_USER}" "$${MINIO_ROOT_PASSWORD}"; do sleep 2; done;
       mc mb --ignore-existing local/lakehouse-warehouse;
       touch /tmp/ready;
-      exec tail -f /dev/null;
+      trap "exit 0" TERM INT;
+      while true; do sleep 3600 & wait $$!; done;
       '
     healthcheck:
       test: ["CMD", "test", "-f", "/tmp/ready"]
@@ -204,11 +205,14 @@ services:
       - /bin/sh
       - -c
       - >-
+        set -e;
         /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:19092 --create --if-not-exists
         --topic raw-app-logs --partitions 3 --replication-factor 1 &&
         /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:19092 --create --if-not-exists
-        --topic ulpf-dead-letter --partitions 1 --replication-factor 1
-        && touch /tmp/ready && exec tail -f /dev/null
+        --topic ulpf-dead-letter --partitions 1 --replication-factor 1;
+        touch /tmp/ready;
+        trap "exit 0" TERM INT;
+        while true; do sleep 3600 & wait $$!; done
     healthcheck:
       test: ["CMD", "test", "-f", "/tmp/ready"]
       interval: 2s

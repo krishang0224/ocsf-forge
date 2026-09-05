@@ -3,12 +3,14 @@
 import json
 import os
 import signal
+import threading
 from datetime import UTC, datetime
 
 from kafka import KafkaConsumer, KafkaProducer
 
 from ulpf.pipeline import EventProcessor
 from ulpf.services.trino import TrinoService
+from ulpf.streaming.retry import ingest_with_retry, initialize_with_retry
 
 
 def main() -> None:
@@ -16,11 +18,10 @@ def main() -> None:
     topic = os.getenv("KAFKA_TOPIC", "raw-app-logs")
     dead_letter_topic = os.getenv("KAFKA_DEAD_LETTER_TOPIC", "ulpf-dead-letter")
     batch_size = int(os.getenv("KAFKA_BATCH_SIZE", "500"))
-    running = True
+    stopped = threading.Event()
 
     def stop(*_args) -> None:
-        nonlocal running
-        running = False
+        stopped.set()
 
     signal.signal(signal.SIGTERM, stop)
     signal.signal(signal.SIGINT, stop)
@@ -40,9 +41,10 @@ def main() -> None:
     )
     trino = TrinoService()
     processor = EventProcessor()
-    trino.ensure_lakehouse()
     try:
-        while running:
+        if not initialize_with_retry(trino, stopped):
+            return
+        while not stopped.is_set():
             polled = consumer.poll(timeout_ms=1000, max_records=batch_size)
             records = [record for partition in polled.values() for record in partition]
             if not records:
@@ -59,7 +61,9 @@ def main() -> None:
                     observed_at=observed,
                 )[0]
                 events.append(event)
-            result = trino.ingest_events(events)
+            result = ingest_with_retry(trino, events, stopped)
+            if result is None:
+                break
             for event in events:
                 if not event.parse_success:
                     producer.send(

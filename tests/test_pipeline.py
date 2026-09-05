@@ -3,6 +3,7 @@ from datetime import UTC, datetime
 
 import pytest
 
+from ulpf.normalizer import OCSFNormalizer
 from ulpf.pipeline import run_payload, run_pipeline
 
 
@@ -118,6 +119,27 @@ def test_multiline_log4j_stack_trace_is_one_event():
     assert events[0].type_uid == 600801
 
 
+def test_indented_non_log4j_input_is_not_merged_with_previous_event():
+    events = run_pipeline(
+        [
+            '{"timestamp":"2026-09-04T00:00:00Z","message":"first"}',
+            '  {"timestamp":"2026-09-04T00:00:01Z","message":"second"}',
+        ]
+    )
+    assert [event.message for event in events] == ["first", "second"]
+
+
+def test_complete_multiline_log4j_payload_is_one_event():
+    payload = (
+        "2026-09-04 12:00:00,001 ERROR [worker] com.example.Service: failed\n"
+        "    at com.example.Service.run(Service.java:42)\n"
+        "Caused by: java.lang.IllegalStateException"
+    )
+    event = run_pipeline([payload])[0]
+    assert event.source_format == "log4j"
+    assert "Caused by" in event.message
+
+
 def test_ocsf_export_contains_canonical_names_and_required_finding_info():
     event = run_pipeline(["CEF:0|Vendor|Product|1|42|Finding|10|src=10.0.0.1"])[0]
     exported = event.to_ocsf_dict()
@@ -128,11 +150,71 @@ def test_ocsf_export_contains_canonical_names_and_required_finding_info():
     assert exported["src_endpoint"]["ip"] == "10.0.0.1"
 
 
+def test_unknown_ocsf_class_fails_closed():
+    event = OCSFNormalizer().normalize(
+        "custom event",
+        "custom",
+        {
+            "_parsed": True,
+            "timestamp_missing_ok": True,
+            "class_uid": 9999,
+            "category_uid": 9,
+            "activity_id": 1,
+            "severity": "Low",
+        },
+    )
+    assert event.parse_success is False
+    assert "Unsupported OCSF class UID: 9999" in event.parse_notes
+
+
 def test_pipeline_accepts_a_text_payload_without_iterating_characters():
     events = run_pipeline(
         '{"timestamp":"2026-09-04T00:00:00Z","message":"one"}\n{"timestamp":"2026-09-04T00:00:01Z","message":"two"}'
     )
     assert [event.message for event in events] == ["one", "two"]
+
+
+def test_pretty_printed_json_object_is_one_uploaded_event():
+    payload = b'{\n  "timestamp": "2026-09-04T00:00:00Z",\n  "message": "pretty"\n}'
+    events = run_payload(payload, "event.json")
+    assert len(events) == 1
+    assert events[0].source_format == "json"
+    assert events[0].message == "pretty"
+
+
+def test_pasted_csv_is_sniffed_without_a_filename_extension():
+    payload = b"timestamp,level,message\n2026-09-04T00:00:00Z,WARN,pasted csv\n"
+    events = run_payload(payload, "Pasted events")
+    assert len(events) == 1
+    assert events[0].source_format == "csv"
+    assert events[0].message == "pasted csv"
+
+
+def test_pasted_csv_header_sniffing_is_case_insensitive():
+    payload = b"Timestamp,Level,Message\n2026-09-04T00:00:00Z,WARN,pasted csv\n"
+    events = run_payload(payload, "Pasted events")
+    assert len(events) == 1
+    assert events[0].source_format == "csv"
+    assert events[0].message == "pasted csv"
+
+
+def test_repeated_xml_fields_are_preserved():
+    payload = b"""<Event><EventData>
+      <Data Name="User">alice</Data>
+      <Data Name="Group">admin</Data>
+      <Data Name="Group">audit</Data>
+    </EventData></Event>"""
+    event = run_payload(payload, "event.xml")[0]
+    assert event.metadata["User"] == "alice"
+    assert event.metadata["Group"] == ["admin", "audit"]
+
+
+def test_leef_custom_separator_honors_escaped_delimiters():
+    line = r"LEEF:2.0|IBM|QRadar|1|100|^|msg=Blocked\^then allowed^src=10.0.0.1^sev=8"
+    event = run_pipeline([line])[0]
+    assert event.source_format == "leef"
+    assert event.message == "Blocked^then allowed"
+    assert event.src_endpoint_ip == "10.0.0.1"
 
 
 def test_structured_metadata_keeps_only_unmapped_vendor_fields():

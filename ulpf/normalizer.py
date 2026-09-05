@@ -6,6 +6,8 @@ from datetime import UTC, datetime
 
 from ulpf.models import SEVERITY_IDS, STATUS_IDS, NormalizedEvent
 
+OCSF_CLASS_CATEGORIES = {2004: 2, 3002: 3, 4001: 4, 4002: 4, 6003: 6, 6008: 6}
+
 
 class OCSFNormalizer:
     def normalize(
@@ -41,11 +43,14 @@ class OCSFNormalizer:
         validation_errors = [
             error for error in (timestamp_error, src_ip_error, dst_ip_error, src_port_error, dst_port_error) if error
         ]
-        expected_category = {2004: 2, 3002: 3, 4001: 4, 4002: 4, 6003: 6, 6008: 6}.get(class_uid)
-        if expected_category is not None and category_uid != expected_category:
-            validation_errors.append(
-                f"OCSF class {class_uid} belongs to category {expected_category}, not {category_uid}"
-            )
+        if parsed.get("_parsed"):
+            expected_category = OCSF_CLASS_CATEGORIES.get(class_uid)
+            if expected_category is None:
+                validation_errors.append(f"Unsupported OCSF class UID: {class_uid}")
+            elif category_uid != expected_category:
+                validation_errors.append(
+                    f"OCSF class {class_uid} belongs to category {expected_category}, not {category_uid}"
+                )
         if severity not in SEVERITY_IDS:
             validation_errors.append(f"Unknown OCSF severity: {severity}")
         parse_success = bool(parsed.get("_parsed")) and not validation_errors and class_uid > 0 and activity_id > 0

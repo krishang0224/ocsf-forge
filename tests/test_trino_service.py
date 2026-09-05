@@ -148,3 +148,17 @@ def test_oversized_single_event_fails_before_event_tables_are_written():
         if statement.startswith("MERGE INTO") and "ingestion_runs" not in statement
     ]
     assert event_merges == []
+
+
+def test_duplicate_ids_inside_one_batch_are_removed_before_merge():
+    client = RecordingTrino()
+    event = run_pipeline(
+        ['{"timestamp":"2025-01-01T00:00:00Z","message":"duplicate"}'],
+        source_id="duplicate-test",
+    )[0]
+    result = client.ingest_events([event, event])
+    assert result.received == 2
+    assert result.committed == 1
+    assert result.duplicates == 1
+    assert client.counts["raw_events"] == 1
+    assert client.counts["application_logs"] == 1

@@ -1,6 +1,5 @@
 """Bounded interactive ingestion and normalized batch preview."""
 
-import hashlib
 import json
 
 import streamlit as st
@@ -40,13 +39,11 @@ def render_ingestion_controls() -> tuple[list, bool]:
                 events = _cached_payload(payload, upload.name)
     else:
         raw = st.text_area(
-            "One event per line",
+            "Paste JSON, CSV, XML, or one event per line",
             height=180,
             placeholder='{"timestamp":"2026-01-01T10:00:00Z","level":"error","message":"..."}',
         )
-        lines = raw.splitlines() if raw.strip() else []
-        source_id = hashlib.sha256(raw.encode()).hexdigest() if raw else "paste-empty"
-        events = _cached_lines(tuple(lines), source_id, "Pasted events")
+        events = _cached_payload(raw.encode(), "Pasted events") if raw.strip() else []
 
     parsed = sum(event.parse_success for event in events)
     if events:

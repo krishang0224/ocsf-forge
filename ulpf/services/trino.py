@@ -116,9 +116,11 @@ class TrinoService:
         return self.ingest_events(events).committed
 
     def ingest_events(self, events: Iterable[NormalizedEvent]) -> IngestionResult:
-        items = list(events)
-        if not items:
+        received_items = list(events)
+        if not received_items:
             return IngestionResult("", 0, 0, 0, 0, "EMPTY")
+        items = list({event.event_id: event for event in received_items}.values())
+        input_duplicates = len(received_items) - len(items)
         run_id = str(uuid.uuid4())
         items = [replace(event, ingestion_run_id=run_id) for event in items]
         started_at = datetime.now(UTC)
@@ -136,9 +138,9 @@ class TrinoService:
             started_at,
             None,
             "RUNNING",
-            len(items),
-            sum(event.parse_success for event in items),
-            sum(not event.parse_success for event in items),
+            len(received_items),
+            sum(event.parse_success for event in received_items),
+            sum(not event.parse_success for event in received_items),
             0,
             0,
             None,
@@ -178,7 +180,7 @@ class TrinoService:
                 )
                 committed = self._count_for_run(connection, self.config.qualified_table, run_id)
                 quarantined = self._count_for_run(connection, "iceberg.logging.quarantine_events", run_id)
-                duplicates = len(items) - committed - quarantined
+                duplicates = input_duplicates + len(items) - committed - quarantined
                 _, snapshot_rows = self._execute_on_connection(
                     connection,
                     'SELECT max(snapshot_id) FROM iceberg.logging."application_logs$snapshots"',
@@ -186,13 +188,13 @@ class TrinoService:
                 snapshot_id = snapshot_rows[0][0] if snapshot_rows else None
                 status = "COMPLETED_WITH_QUARANTINE" if quarantined else "COMPLETED"
                 self._finish_run(connection, run_id, status, committed, quarantined, duplicates, snapshot_id, "")
-            return IngestionResult(run_id, len(items), committed, quarantined, duplicates, status)
+            return IngestionResult(run_id, len(received_items), committed, quarantined, duplicates, status)
         except Exception as exc:
             try:
                 with self._connection() as connection:
                     self._finish_run(connection, run_id, "FAILED", 0, 0, 0, None, str(exc)[:2000])
             except Exception:
-                pass
+                LOGGER.exception("Failed to record failed ingestion run %s", run_id)
             raise
 
     @staticmethod

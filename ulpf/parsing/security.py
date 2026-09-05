@@ -67,7 +67,7 @@ class CefParser:
 class LeefParser:
     name = "leef"
     source_format = "leef"
-    version = "1.0.0"
+    version = "1.1.0"
 
     def detect(self, value: str) -> float:
         return 1.0 if value.lstrip().startswith("LEEF:") else 0.0
@@ -83,7 +83,7 @@ class LeefParser:
             separator, _, payload = payload.partition("|")
             separator = {"0x09": "\t", "^": "^"}.get(separator, separator or "\t")
         ext: dict[str, str] = {}
-        for field in payload.split(separator):
+        for field in split_escaped(payload, separator):
             key, marker, field_value = field.partition("=")
             if marker:
                 ext[key.strip()] = unescape_cef(field_value.strip())

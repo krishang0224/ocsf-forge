@@ -128,7 +128,7 @@ class CsvRowParser:
 class XmlEventParser:
     name = "xml"
     source_format = "xml"
-    version = "1.0.0"
+    version = "1.1.0"
 
     def detect(self, value: str) -> float:
         return 0.8 if value.lstrip().startswith("<") and value.rstrip().endswith(">") else 0.0
@@ -140,11 +140,18 @@ class XmlEventParser:
             root = ET.fromstring(value)
         except ET.ParseError:
             return {"_parsed": False, "parse_notes": "Invalid XML"}
-        item = {
-            child.tag.rsplit("}", 1)[-1]: child.text or ""
-            for child in root.iter()
-            if child is not root and len(child) == 0
-        }
+        item = {}
+        for child in root.iter():
+            if child is root or len(child) != 0:
+                continue
+            key = child.attrib.get("Name") or child.tag.rsplit("}", 1)[-1]
+            value = child.text or ""
+            if key not in item:
+                item[key] = value
+            elif isinstance(item[key], list):
+                item[key].append(value)
+            else:
+                item[key] = [item[key], value]
         if not item:
             return {"_parsed": False, "parse_notes": "XML event has no scalar fields"}
         return structured_record(item, observed_at)

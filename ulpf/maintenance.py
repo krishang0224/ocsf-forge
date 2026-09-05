@@ -1,4 +1,4 @@
-"""Metric-gated Iceberg maintenance scheduler."""
+"""Iceberg compaction and retention scheduler."""
 
 import json
 import os

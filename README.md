@@ -57,7 +57,7 @@ All ports bind to loopback. Named volumes keep the warehouse, catalog, and Kafka
 - CEF extension values containing spaces and escaped delimiters
 - Apache Common and Combined formats
 - RFC 3164 and RFC 5424 Syslog
-- multiline Log4j stack traces
+- multiline Log4j stack traces in files, pasted input, or one complete Kafka message
 - JSON arrays, CSV files, and XML event collections
 - timezone-aware timestamps with microsecond precision
 - invalid timestamps, IP addresses, and ports routed to quarantine
@@ -75,12 +75,12 @@ These numbers came from the local Compose stack on a 16 GB development machine. 
 | Check | Result |
 | --- | ---: |
 | Mixed-format parser run | 50,000 records at ~11,900 records/sec |
-| Durable 2,500-row ingest | ~326 records/sec |
+| Durable 2,500-row ingest | 14.2 seconds (~177 records/sec) |
 | Four concurrent writers | 2,000/2,000 rows committed, 2,000 unique IDs |
 | Kafka end-to-end | 5,000/5,000 raw records received |
 | Invalid Kafka records | 250/250 quarantined and sent to the dead-letter topic |
 | Replay test | 2,500 duplicates detected, zero duplicate rows added |
-| Automated tests | 41 passing |
+| Automated tests | 54 passing |
 
 The first load test exposed real Iceberg conflicts and Trino's 1 MB query-text ceiling. The current writer retries idempotent commits and splits batches by both row count and encoded parameter size.
 
@@ -91,6 +91,8 @@ docker compose --profile streaming up --build -d
 ```
 
 Send newline-delimited events to `localhost:9092` on `raw-app-logs`. The worker writes Iceberg before committing Kafka offsets. Invalid records also go to `ulpf-dead-letter` with their source coordinates and error reason.
+
+Kafka message boundaries are event boundaries. A complete multiline stack trace in one message is parsed as one event; a trace split across several messages remains several records because the worker does not guess where a cross-message trace ends.
 
 ## Operate it
 

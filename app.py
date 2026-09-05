@@ -14,7 +14,6 @@ from ulpf.ui.theme import apply_theme
 
 st.set_page_config(
     page_title="OCSF Forge",
-    page_icon="◈",
     layout="wide",
     initial_sidebar_state="expanded",
 )
@@ -44,7 +43,7 @@ if trino_ready and not st.session_state.get("lakehouse_initialized"):
         trino_ready, trino_detail = False, str(exc)
 
 with st.sidebar:
-    st.markdown('<p class="eyebrow">Mixed logs → OCSF</p>', unsafe_allow_html=True)
+    st.markdown('<p class="eyebrow">Mixed logs to OCSF</p>', unsafe_allow_html=True)
     st.markdown("## OCSF Forge")
     st.caption("Keep the evidence. Unify the schema.")
     st.divider()
@@ -64,9 +63,9 @@ with st.sidebar:
                     st.code(str(exc))
     st.divider()
     st.markdown("### Stack")
-    st.markdown(f"{'🟢' if trino_ready else '🟠'} Trino")
+    st.markdown(f"Trino: {'ready' if trino_ready else 'unavailable'}")
     st.caption(trino_detail if trino_ready else "Waiting for query engine")
-    st.markdown(f"{'🟢' if minio_state['ready'] else '🟠'} MinIO")
+    st.markdown(f"MinIO: {'ready' if minio_state['ready'] else 'unavailable'}")
     st.caption("Warehouse bucket available" if minio_state["ready"] else "Waiting for warehouse")
 
 st.markdown('<p class="eyebrow">Security event pipeline</p>', unsafe_allow_html=True)

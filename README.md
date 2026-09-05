@@ -9,23 +9,23 @@ The project exists for a familiar reason: collecting logs is easy; making eight 
 ## See the pipeline work
 
 ```text
-files · paste · Kafka
-        │
-        ▼
-JSON · CSV · XML · CEF · LEEF · Syslog · Apache · Log4j
-        │
-        ▼
+files / paste / Kafka
+        |
+        v
+JSON / CSV / XML / CEF / LEEF / Syslog / Apache / Log4j
+        |
+        v
 versioned parser registry
-        │
-        ├── raw_events          original evidence
-        ├── quarantine_events   rejected data + reason
-        └── application_logs    normalized OCSF 1.8 events
-                    │
-                    ▼
+        |
+        +-- raw_events          original evidence
+        +-- quarantine_events   rejected data + reason
+        +-- application_logs    normalized OCSF 1.8 events
+                    |
+                    v
              Trino SQL + dashboard
 
-Iceberg catalog  → Lakekeeper + PostgreSQL
-Parquet storage  → MinIO
+Iceberg catalog  -> Lakekeeper + PostgreSQL
+Parquet storage  -> MinIO
 ```
 
 Every record gets a deterministic ID from its source, offset, and payload hash. Replaying a file or Kafka range fills incomplete writes without duplicating rows.

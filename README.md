@@ -1,10 +1,27 @@
 # OCSF Forge
 
+[![CI](https://github.com/krishang0224/ocsf-forge/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/krishang0224/ocsf-forge/actions/workflows/ci.yml)
+[![License: Apache-2.0](https://img.shields.io/badge/License-Apache--2.0-blue.svg)](LICENSE)
+[![Python 3.11](https://img.shields.io/badge/Python-3.11-blue.svg)](CONTRIBUTING.md)
+
 **Mixed logs in. Queryable OCSF out.**
 
 OCSF Forge turns JSON, CSV, XML, CEF, LEEF, Syslog, Apache, and Log4j records into one security-event model. It keeps the original evidence, sends bad records to quarantine, and writes the clean stream to Apache Iceberg for SQL analysis through Trino.
 
 The project exists for a familiar reason: collecting logs is easy; making eight incompatible formats useful in the same query is not.
+
+![Dashboard showing event totals, severity distribution, and services](docs/images/dashboard.png)
+
+Screenshots use the bundled synthetic sample logs. [Why OCSF?](docs/why-ocsf.md)
+
+<details>
+<summary>SQL workspace and ingestion results</summary>
+
+![SQL workspace with a query and results from Iceberg](docs/images/sql-workspace.png)
+
+![Ingestion quality showing a completed sample run](docs/images/ingestion.png)
+
+</details>
 
 ## See the pipeline work
 
@@ -30,9 +47,9 @@ Parquet storage  -> MinIO
 
 Every record gets a deterministic ID from its source, offset, and payload hash. Replaying a file or Kafka range fills incomplete writes without duplicating rows.
 
-## Run it in five minutes
+## Run locally
 
-You need Docker Compose or Podman Compose.
+You need Docker Compose or Podman Compose. The first launch downloads several images and builds the app; allow extra time for your connection and laptop. Later launches reuse cached images. The local Trino configuration reserves a 4 GB Java heap, in addition to the other services.
 
 ```bash
 cp .env.example .env
@@ -80,9 +97,11 @@ These numbers came from the local Compose stack on a 16 GB development machine. 
 | Kafka end-to-end | 5,000/5,000 raw records received |
 | Invalid Kafka records | 250/250 quarantined and sent to the dead-letter topic |
 | Replay test | 2,500 duplicates detected, zero duplicate rows added |
-| Automated tests | 54 passing |
+| Automated checks | [Latest CI result and test output](https://github.com/krishang0224/ocsf-forge/actions/workflows/ci.yml) |
 
 The first load test exposed real Iceberg conflicts and Trino's 1 MB query-text ceiling. The current writer retries idempotent commits and splits batches by both row count and encoded parameter size.
+
+CI runs lint, tests, and Compose configuration validation on pushes and pull requests. It does not reproduce the live throughput benchmarks above.
 
 ## Stream from Kafka
 
@@ -129,3 +148,9 @@ docker compose config --quiet
 ```
 
 The Python package remains named `ulpf` so existing deployments and environment variables continue to work after the project rename.
+
+`ulpf/parsers.py` is a compatibility facade; implementations and registration live in `ulpf/parsing/`. Start with [CONTRIBUTING.md](CONTRIBUTING.md) for new parsers and fixes. See the [changelog](CHANGELOG.md) before upgrading an existing deployment.
+
+## License
+
+Copyright 2026 krishang0224. Licensed under the [Apache License, Version 2.0](LICENSE). Dependencies and container images retain their respective licenses.

@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Report a security vulnerability privately
+    url: https://github.com/krishang0224/ocsf-forge/security/advisories/new
+    about: Use this channel for undisclosed vulnerabilities rather than a public issue.

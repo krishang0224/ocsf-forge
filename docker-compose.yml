@@ -254,6 +254,37 @@ services:
     restart: unless-stopped
     networks: [lakehouse]
 
+  detection-worker:
+    build: .
+    image: ulpf:3.0
+    profiles: ["detection"]
+    command: ["python", "-m", "ulpf.detection.worker"]
+    depends_on:
+      trino:
+        condition: service_healthy
+    environment:
+      TRINO_HOST: trino
+      TRINO_PORT: 8080
+      TRINO_USER: ulpf_detector
+      ULPF_DETECTION_WINDOW_SECONDS: ${ULPF_DETECTION_WINDOW_SECONDS:-300}
+      ULPF_DETECTION_FAILURE_THRESHOLD: ${ULPF_DETECTION_FAILURE_THRESHOLD:-5}
+      ULPF_DETECTION_SPRAY_THRESHOLD: ${ULPF_DETECTION_SPRAY_THRESHOLD:-5}
+      ULPF_DETECTION_LOOKBACK_SECONDS: ${ULPF_DETECTION_LOOKBACK_SECONDS:-3600}
+      ULPF_DETECTION_INTERVAL_SECONDS: ${ULPF_DETECTION_INTERVAL_SECONDS:-30}
+      ULPF_DETECTION_MAX_EVENTS: ${ULPF_DETECTION_MAX_EVENTS:-50000}
+      ULPF_DETECTION_EVIDENCE_LIMIT: ${ULPF_DETECTION_EVIDENCE_LIMIT:-20}
+      ULPF_INSERT_BATCH_SIZE: ${ULPF_INSERT_BATCH_SIZE:-500}
+      ULPF_TRINO_MAX_QUERY_BYTES: ${ULPF_TRINO_MAX_QUERY_BYTES:-850000}
+      ULPF_ICEBERG_COMMIT_RETRIES: ${ULPF_ICEBERG_COMMIT_RETRIES:-6}
+    healthcheck:
+      test: ["CMD", "python", "-m", "ulpf.detection.worker", "--healthcheck"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    restart: unless-stopped
+    networks: [lakehouse]
+
   maintenance:
     build: .
     image: ulpf:3.0
@@ -274,7 +305,7 @@ services:
       ULPF_SNAPSHOT_RETENTION_DAYS: ${ULPF_SNAPSHOT_RETENTION_DAYS:-7}
       ULPF_ORPHAN_RETENTION_DAYS: ${ULPF_ORPHAN_RETENTION_DAYS:-7}
       ULPF_MAINTENANCE_INTERVAL_SECONDS: ${ULPF_MAINTENANCE_INTERVAL_SECONDS:-86400}
-      ULPF_MAINTENANCE_TABLES: ${ULPF_MAINTENANCE_TABLES:-raw_events,application_logs,quarantine_events,ingestion_runs}
+      ULPF_MAINTENANCE_TABLES: ${ULPF_MAINTENANCE_TABLES:-raw_events,application_logs,quarantine_events,ingestion_runs,detections}
     healthcheck:
       test: ["CMD-SHELL", "kill -0 1"]
       interval: 30s

@@ -8,6 +8,8 @@
 
 OCSF Forge turns JSON, CSV, XML, CEF, LEEF, Syslog, Apache, and Log4j records into one security-event model. It keeps the original evidence, sends bad records to quarantine, and writes the clean stream to Apache Iceberg for SQL analysis through Trino.
 
+An optional detection worker identifies repeated authentication failures, possible password spraying, and successful logons after repeated failures. Findings include the triggering rule and source event IDs for investigation.
+
 The project exists for a familiar reason: collecting logs is easy; making eight incompatible formats useful in the same query is not.
 
 ![Dashboard showing event totals, severity distribution, and services](docs/images/dashboard.png)
@@ -37,6 +39,7 @@ versioned parser registry
         +-- raw_events          original evidence
         +-- quarantine_events   rejected data + reason
         +-- application_logs    normalized OCSF 1.8 events
+                    +-- authentication rules --> detections
                     |
                     v
              Trino SQL + dashboard
@@ -113,6 +116,17 @@ Send newline-delimited events to `localhost:9092` on `raw-app-logs`. The worker 
 
 Kafka message boundaries are event boundaries. A complete multiline stack trace in one message is parsed as one event; a trace split across several messages remains several records because the worker does not guess where a cross-message trace ends.
 
+## Detect suspicious authentication
+
+```bash
+docker compose --profile detection up --build -d
+docker compose exec -T app python -m ulpf.detection.demo > /tmp/ocsf-detection-demo.jsonl
+```
+
+Upload the generated file and ingest it. The 15 synthetic events produce three local findings with default thresholds; open **Findings** and refresh after the next scan. Each finding is an investigation lead, not a verdict. [Rules, tuning, replay limits, and backfills](docs/detection.md).
+
+![Three authentication findings with rule details and source evidence IDs](docs/images/detections.png)
+
 ## Operate it
 
 ```bash
@@ -144,7 +158,7 @@ python -m venv .venv
 pip install -r requirements-dev.txt
 pytest -q
 ruff check .
-docker compose config --quiet
+docker compose --profile streaming --profile operations --profile detection config --quiet
 ```
 
 The Python package remains named `ulpf` so existing deployments and environment variables continue to work after the project rename.

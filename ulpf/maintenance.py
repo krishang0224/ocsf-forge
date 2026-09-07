@@ -8,7 +8,7 @@ from datetime import UTC, datetime
 
 from ulpf.services.trino import TrinoService
 
-MAINTAINABLE_TABLES = ("raw_events", "application_logs", "quarantine_events", "ingestion_runs")
+MAINTAINABLE_TABLES = ("raw_events", "application_logs", "quarantine_events", "ingestion_runs", "detections")
 
 
 def run_once(service: TrinoService | None = None) -> dict:

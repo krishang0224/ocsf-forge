@@ -4,10 +4,15 @@ Changes to parser output, event identity, and storage layout are recorded here. 
 
 ## Unreleased
 
+- Add an optional authentication detection worker, an additive `detections` table, a Findings view, and a synthetic demo. See [detection operations](docs/detection.md) for thresholds, backfills, and rollback.
+- Restrict the detector's table permissions to reading normalized events and managing findings; allow analysts to read findings.
+
+## 2026-09-06 — Repository documentation
+
 - Add Apache-2.0 licensing, CI checks, contribution guidance, and an explanation of the OCSF mapping.
 - Add screenshots of the dashboard, SQL workspace, and ingestion results using bundled sample data.
 - Replace the fixed README test count with a link to CI and remove the five-minute setup promise.
-- No application behavior or Iceberg table layout changes in this documentation update.
+- No application behavior or Iceberg table layout changes in that documentation update.
 
 ## 2026-09-05 — Structured ingestion and recovery
 

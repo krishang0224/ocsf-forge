@@ -28,4 +28,4 @@ jobs:
       - name: Tests
         run: pytest -q
       - name: Validate all Compose profiles
-        run: docker compose --profile streaming --profile operations config --quiet
+        run: docker compose --profile streaming --profile operations --profile detection config --quiet

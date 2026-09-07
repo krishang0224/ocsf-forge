@@ -1,5 +1,7 @@
 """Lakehouse schemas, migrations, and curated analytical queries."""
 
+from ulpf.detection.sql import CREATE_DETECTIONS_TABLE
+
 CREATE_SCHEMA = "CREATE SCHEMA IF NOT EXISTS iceberg.logging"
 
 CREATE_RAW_TABLE = """
@@ -150,6 +152,7 @@ LAKEHOUSE_SETUP = [
     CREATE_TABLE,
     CREATE_QUARANTINE_TABLE,
     CREATE_RUNS_TABLE,
+    CREATE_DETECTIONS_TABLE,
     *APPLICATION_LOG_MIGRATIONS,
 ]
 
@@ -214,6 +217,10 @@ SELECT
 """.strip()
 
 EXAMPLE_QUERIES = {
+    "Local detection findings": """SELECT detected_at, title, hostname, service_name, ip_address, user_id, event_count, event_id
+FROM iceberg.logging.detections
+ORDER BY detected_at DESC
+LIMIT 100""",
     "Latest high-severity events": """SELECT event_timestamp, service_name, log_level, ip_address, message
 FROM iceberg.logging.application_logs
 WHERE log_level IN ('High', 'Critical')

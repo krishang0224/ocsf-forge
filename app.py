@@ -8,6 +8,7 @@ from ulpf.config import settings
 from ulpf.services.minio import MinioService
 from ulpf.services.trino import TrinoService
 from ulpf.ui.dashboard import clear_dashboard_cache, render_dashboard
+from ulpf.ui.detections import render_detections
 from ulpf.ui.ingestion import render_batch_preview, render_ingestion_controls
 from ulpf.ui.sql_console import render_sql_console
 from ulpf.ui.theme import apply_theme
@@ -72,7 +73,7 @@ st.markdown('<p class="eyebrow">Security event pipeline</p>', unsafe_allow_html=
 st.title("Any log format. One security schema.")
 st.caption("OCSF-aligned events · Apache Iceberg snapshots · MinIO object storage · Trino SQL")
 
-tab_data, tab_ingest, tab_sql, tab_about = st.tabs(["Current data", "Batch preview", "SQL workspace", "Architecture"])
+tab_data, tab_findings, tab_ingest, tab_sql, tab_about = st.tabs(["Current data", "Findings", "Batch preview", "SQL workspace", "Architecture"])
 with tab_data:
     if trino_ready:
         render_dashboard(dashboard)
@@ -80,6 +81,9 @@ with tab_data:
         st.info("The lakehouse is starting. Current Iceberg data will appear when Trino is ready.")
 with tab_ingest:
     render_batch_preview(events)
+with tab_findings:
+    if trino_ready:
+        render_detections(dashboard)
 with tab_sql:
     render_sql_console(reader)
 with tab_about:

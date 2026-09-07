@@ -9,6 +9,7 @@ from collections.abc import Callable, Iterable
 from dataclasses import replace
 from datetime import UTC, datetime
 from time import perf_counter, sleep
+from typing import TypeVar
 
 import pandas as pd
 from trino.dbapi import connect
@@ -25,6 +26,7 @@ MUTATING_KEYWORDS = re.compile(
 )
 COMMIT_CONFLICT_MARKERS = ("ICEBERG_COMMIT_ERROR", "TRANSACTION_CONFLICT")
 LOGGER = logging.getLogger(__name__)
+MergeItem = TypeVar("MergeItem")
 
 
 class UnsafeQueryError(ValueError):
@@ -285,8 +287,8 @@ class TrinoService:
         connection,
         table: str,
         columns: tuple[str, ...],
-        events: list[NormalizedEvent],
-        values: Callable[[NormalizedEvent], tuple],
+        events: list[MergeItem],
+        values: Callable[[MergeItem], tuple],
     ) -> None:
         value_group = "(" + ", ".join("?" for _ in columns) + ")"
         aliases = ", ".join(columns)

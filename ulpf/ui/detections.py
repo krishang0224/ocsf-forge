@@ -12,11 +12,25 @@ def _load_findings(_trino):
     return _trino.query(RECENT_DETECTIONS)[0]
 
 
+@st.cache_data(ttl=10, show_spinner=False, max_entries=32)
+def _load_evidence(_trino, event_ids: tuple[str, ...]):
+    if not event_ids or len(event_ids) > 200 or not all(isinstance(value, str) for value in event_ids):
+        raise ValueError("Finding evidence must contain between 1 and 200 event IDs")
+    columns, rows = _trino.execute(
+        "SELECT event_id, event_timestamp, hostname, service_name, user_id, ip_address, status, message "
+        "FROM iceberg.logging.application_logs WHERE event_id IN ("
+        + ",".join("?" for _ in event_ids) + ") ORDER BY event_timestamp, event_id LIMIT 200",
+        list(event_ids), row_limit=200,
+    )
+    return [dict(zip(columns, row, strict=True)) for row in rows]
+
+
 def render_detections(trino) -> None:
     st.subheader("Authentication findings")
     st.caption("Rule matches are investigation leads. They do not establish that an account was compromised.")
     if st.button("Refresh findings"):
         _load_findings.clear()
+        _load_evidence.clear()
     try:
         findings = _load_findings(trino)
     except Exception as exc:
@@ -37,6 +51,15 @@ def render_detections(trino) -> None:
     st.write(f"Evidence window: {row['first_seen']} to {row['last_seen']}")
     st.json(json.loads(row["evidence_event_ids_json"]))
     st.caption("Evidence IDs refer to application_logs.event_id. The OCSF document records whether this evidence list is truncated.")
+    if st.button("Load supporting events"):
+        try:
+            ids = tuple(json.loads(row["evidence_event_ids_json"]))
+            evidence = _load_evidence(trino, ids)
+            st.dataframe(evidence, hide_index=True, width="stretch")
+            if len(evidence) < len(set(ids)):
+                st.warning("Some supporting events are missing, possibly because of retention or deletion. The finding alone is not complete evidence.")
+        except Exception as exc:
+            st.error(f"Supporting events could not be loaded: {exc}")
     st.download_button("Download finding (OCSF JSON)", row["ocsf_json"], f"finding-{selected}.json", "application/json")
     with st.expander("OCSF finding"):
         st.json(json.loads(row["ocsf_json"]))

@@ -86,7 +86,7 @@ services:
     networks: [lakehouse]
 
   catalog-init:
-    image: docker.io/curlimages/curl:8.15.0
+    image: docker.io/library/python:3.11-slim
     depends_on:
       lakekeeper:
         condition: service_healthy
@@ -95,9 +95,9 @@ services:
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
-    entrypoint: ["/bin/sh", "/config/init-catalog.sh"]
+    entrypoint: ["python", "/config/init_catalog.py"]
     volumes:
-      - ./infra/lakekeeper/init-catalog.sh:/config/init-catalog.sh:ro,Z
+      - ./infra/lakekeeper/init_catalog.py:/config/init_catalog.py:ro,Z
     healthcheck:
       test: ["CMD", "test", "-f", "/tmp/ready"]
       interval: 2s

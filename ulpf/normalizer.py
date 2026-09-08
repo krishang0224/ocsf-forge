@@ -98,7 +98,7 @@ class OCSFNormalizer:
             device_product=parsed.get("device_product", fmt) or fmt,
             message=str(parsed.get("message", ""))[:2000],
             raw_payload_hash=raw_hash,
-            original_raw_payload=raw_line.rstrip("\n"),
+            original_raw_payload=raw_line,
             source_format=fmt,
             source_id=source_id,
             source_offset=source_offset,
@@ -116,6 +116,8 @@ class OCSFNormalizer:
         if value in (None, ""):
             return None, ""
         try:
+            if isinstance(value, bool) or isinstance(value, float) and not value.is_integer():
+                raise ValueError("Port must be an integer")
             port = int(value)
         except (TypeError, ValueError, OverflowError):
             return None, f"Invalid {label} port: {value}"

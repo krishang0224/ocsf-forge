@@ -5,6 +5,7 @@ from datetime import datetime
 from ipaddress import ip_address
 
 from ulpf.parsing.authentication import authentication_action
+from ulpf.parsing.json_document import decode_json
 
 MAPPED_FIELDS = {
     "@timestamp",
@@ -106,16 +107,16 @@ def structured_record(item: dict, observed_at: datetime) -> dict:
 class JsonParser:
     name = "json"
     source_format = "json"
-    version = "2.1.0"
+    version = "2.2.0"
 
     def detect(self, value: str) -> float:
         return 0.95 if value.lstrip().startswith("{") else 0.0
 
     def parse(self, value: str, observed_at: datetime) -> dict:
         try:
-            item = json.loads(value)
-        except ValueError:
-            return {"_parsed": False, "parse_notes": "Invalid JSON"}
+            item = decode_json(value)
+        except ValueError as exc:
+            return {"_parsed": False, "parse_notes": f"Invalid JSON: {exc}"}
         return (
             structured_record(item, observed_at)
             if isinstance(item, dict)

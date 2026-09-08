@@ -74,6 +74,7 @@ class NormalizedEvent:
             "timezone_offset": self.timezone_offset,
             "message": self.message,
             "metadata": {
+                "uid": self.event_id,
                 "version": self.ocsf_version,
                 "logged_time": int(logged_time.timestamp() * 1000),
                 "product": {

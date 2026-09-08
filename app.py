@@ -50,7 +50,7 @@ with st.sidebar:
     st.divider()
     events, ingest_clicked = render_ingestion_controls()
     if ingest_clicked:
-        with st.spinner("Committing an atomic Iceberg snapshot…"):
+        with st.spinner("Writing raw, normalized, and quarantine records…"):
             try:
                 result = writer.ingest_events(events)
                 st.success(
@@ -70,7 +70,7 @@ with st.sidebar:
     st.caption("Warehouse bucket available" if minio_state["ready"] else "Waiting for warehouse")
 
 st.markdown('<p class="eyebrow">Security event pipeline</p>', unsafe_allow_html=True)
-st.title("Any log format. One security schema.")
+st.title("Mixed log formats. One security schema.")
 st.caption("OCSF-aligned events · Apache Iceberg snapshots · MinIO object storage · Trino SQL")
 
 tab_data, tab_findings, tab_ingest, tab_sql, tab_about = st.tabs(["Current data", "Findings", "Batch preview", "SQL workspace", "Architecture"])

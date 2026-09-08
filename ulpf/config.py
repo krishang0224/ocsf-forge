@@ -1,6 +1,8 @@
 """Environment-backed application configuration."""
 
+import math
 import os
+import re
 from dataclasses import dataclass
 
 from trino.auth import BasicAuthentication
@@ -33,6 +35,22 @@ class Settings:
     trino_max_query_bytes: int = int(os.getenv("ULPF_TRINO_MAX_QUERY_BYTES", "850000"))
     iceberg_commit_retries: int = int(os.getenv("ULPF_ICEBERG_COMMIT_RETRIES", "6"))
     max_upload_bytes: int = int(os.getenv("ULPF_MAX_UPLOAD_BYTES", str(25 * 1024 * 1024)))
+
+    def __post_init__(self):
+        for name in ("query_row_limit", "insert_batch_size", "trino_max_query_bytes", "max_upload_bytes"):
+            if getattr(self, name) <= 0:
+                raise ValueError(f"{name} must be positive")
+        if self.iceberg_commit_retries < 0:
+            raise ValueError("iceberg_commit_retries cannot be negative")
+        if not math.isfinite(self.trino_request_timeout) or self.trino_request_timeout <= 0:
+            raise ValueError("trino_request_timeout must be finite and positive")
+        if not 1 <= self.trino_port <= 65535:
+            raise ValueError("trino_port must be between 1 and 65535")
+        if self.trino_http_scheme not in {"http", "https"}:
+            raise ValueError("trino_http_scheme must be http or https")
+        for name in ("trino_catalog", "trino_schema", "trino_table"):
+            if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", getattr(self, name)):
+                raise ValueError(f"{name} must be a simple SQL identifier")
 
     @property
     def qualified_table(self) -> str:

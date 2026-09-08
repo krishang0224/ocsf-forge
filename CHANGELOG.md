@@ -4,6 +4,12 @@ Changes to parser output, event identity, and storage layout are recorded here. 
 
 ## Unreleased
 
+- Add an offline `python -m ulpf demo` and bounded `normalize` CLI with machine-readable output, rejection diagnostics, and documented exit codes.
+- Reject duplicate/non-finite JSON values and malformed CSV documents; retain invalid UTF-8 bytes in quarantine metadata. Reject boolean and fractional ports, normalize naive observation times consistently, and keep record hashes consistent with stored payloads.
+- Export event IDs in OCSF metadata and let investigators load a finding's supporting normalized records directly.
+- Validate unsafe or nonsensical connection/batching settings at startup. Correct atomicity and format-coverage claims and document whole-file evidence preservation limits.
+- Serialize catalog credentials as JSON rather than shell-interpolated strings. Catalog initialization now rejects unexpected conflicts instead of treating every HTTP 409 as success.
+
 - Preserve pasted Syslog records, BOM-prefixed JSON, hostname-valued servers, and malformed records without aborting the batch. Authentication outcomes must be explicit; ambiguous login events no longer imply success, and conflicting outcomes are quarantined.
 - Decode JSON once and assemble multiline traces with a single join. Bound ingestion previews and defer full-batch exports until requested.
 - Close Trino cursors after limited queries, recognize quoted SQL correctly, and select audit snapshots by commit time instead of snapshot ID.

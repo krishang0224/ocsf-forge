@@ -16,6 +16,8 @@ The project exists for a familiar reason: collecting logs is easy; making eight 
 
 Screenshots use the bundled synthetic sample logs. [Why OCSF?](docs/why-ocsf.md)
 
+[Evaluation guide and verification checkpoint](docs/evaluation.md) · [Contribute a parser](docs/parser-development.md)
+
 <details>
 <summary>SQL workspace and ingestion results</summary>
 
@@ -51,6 +53,19 @@ Parquet storage  -> MinIO
 Every record gets a deterministic ID from its source, offset, and payload hash. Replaying a file or Kafka range fills incomplete writes without duplicating rows.
 
 ## Run locally
+
+### Try the core without Docker
+
+From a checkout, with Python 3.11. These commands use only the Python standard library—no dependency install or services needed:
+
+```bash
+python -m ulpf demo
+python -m ulpf normalize your-logs.jsonl > normalized.jsonl
+```
+
+The synthetic demo prints three findings, including their rule IDs and supporting event IDs. It uses the same parser and rule code as the lakehouse, but does not connect to storage. Normalization writes accepted OCSF records to stdout and rejection diagnostics plus a summary to stderr. Exit codes: `0` no rejections (including empty input), `1` rejected records present, `2` input/usage error. Input is bounded to 25 MiB by default; this is a batch evaluator, not a streaming substitute. Keep the source file: the CLI does not persist quarantine or raw evidence.
+
+### Start the full lakehouse
 
 You need Docker Compose or Podman Compose. The first launch downloads several images and builds the app; allow extra time for your connection and laptop. Later launches reuse cached images. The local Trino configuration reserves a 4 GB Java heap, in addition to the other services.
 
@@ -125,6 +140,8 @@ docker compose exec -T app python -m ulpf.detection.demo > /tmp/ocsf-detection-d
 
 Upload the generated file and ingest it. The 15 synthetic events produce three local findings with default thresholds; open **Findings** and refresh after the next scan. Each finding is an investigation lead, not a verdict. [Rules, tuning, replay limits, and backfills](docs/detection.md).
 
+Select a finding and choose **Load supporting events** to inspect its normalized evidence without copying IDs into SQL. Missing retained evidence is reported explicitly.
+
 ![Three authentication findings with rule details and source evidence IDs](docs/images/detections.png)
 
 ## Operate it
@@ -147,6 +164,9 @@ No language model sits in the ingestion path. Parsing, validation, IDs, and OCSF
 - Generic formats work today; deep vendor coverage still requires vendor-specific parser modules and fixtures.
 - A single event larger than the safe Trino binding limit is rejected before event tables are partially written. Very large payloads should be stored externally and referenced by URI.
 - Multi-table ingestion is recoverable and idempotent, but not one atomic transaction across every Iceberg table.
+- Structured uploads are split into extracted records: JSON, CSV, and XML formatting is not retained byte for byte. Archive the original file separately if whole-document forensic preservation is required.
+- Duplicate JSON keys, non-finite JSON numbers, ambiguous CSV headers, malformed CSV rows, and invalid UTF-8 are rejected. An invalid CSV document is quarantined as a whole rather than partially accepted.
+- OCSF-aligned output is not a claim of complete schema validation or full vendor coverage. Local rules cover three authentication patterns, not a replacement for a SIEM or incident-response process.
 
 Read the [production security checklist](docs/production-security.md) before exposing any service.
 

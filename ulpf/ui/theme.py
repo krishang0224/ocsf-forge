@@ -1,32 +1,50 @@
-"""OCSF Forge visual styles."""
+"""Session-persistent appearance controls and the public styling entry point."""
+
+from dataclasses import asdict
 
 import streamlit as st
 
+from ulpf.ui.theme_css import build_css
+from ulpf.ui.theme_presets import FIELDS, PREFIX, PRESETS, contrast, from_query, validated
+
+
+def _sync_url(preset, custom):
+    desired = {} if preset == "Terminal" else {"ui_theme": preset}
+    if preset == "Custom":
+        desired.update({PREFIX + key: str(value).lower() if isinstance(value, bool) else str(value)
+                        for key, value in asdict(custom).items()})
+    for key in ("ui_theme", *(PREFIX + field for field in FIELDS)):
+        if key in desired:
+            if st.query_params.get(key) != desired[key]:
+                st.query_params[key] = desired[key]
+        elif key in st.query_params:
+            del st.query_params[key]
+
 
 def apply_theme() -> None:
-    st.markdown(
-        """
-        <style>
-        :root { --ink: #e8edf7; --muted: #8f9aae; --cyan: #41d9c2; --panel: #111827; }
-        .stApp { background: #080d16; color: var(--ink); }
-        [data-testid="stSidebar"] { background: #0d1420; border-right: 1px solid #202c3d; }
-        [data-testid="stHeader"] { background: rgba(8,13,22,.88); }
-        .block-container { max-width: 1500px; padding-top: 1.6rem; }
-        h1, h2, h3 { letter-spacing: -.025em; }
-        h1 { font-size: 2rem !important; }
-        div[data-testid="stMetric"] { background: linear-gradient(145deg,#111a28,#0d1521); border: 1px solid #253248; border-radius: 12px; padding: 16px 18px; }
-        div[data-testid="stMetricValue"] { color: #f7fbff; font-size: 1.7rem; }
-        div[data-baseweb="tab-list"] { gap: 8px; border-bottom: 1px solid #233044; }
-        button[data-baseweb="tab"] { border-radius: 8px 8px 0 0; padding-inline: 18px; }
-        .status-strip { display:flex; gap:18px; align-items:center; color:#a9b5c7; font-size:.88rem; margin:.25rem 0 1rem; }
-        .status-dot { width:8px; height:8px; display:inline-block; border-radius:50%; margin-right:7px; background:#41d9c2; box-shadow:0 0 12px #41d9c288; }
-        .status-dot.off { background:#f59e6b; box-shadow:none; }
-        .eyebrow { color:#41d9c2; font-size:.78rem; font-weight:700; text-transform:uppercase; letter-spacing:.13em; }
-        .muted { color:#8f9aae; }
-        .stButton > button { border-radius:8px; font-weight:650; }
-        .stButton > button[kind="primary"] { background:#2fc9b0; color:#06110f; border-color:#2fc9b0; }
-        code { font-size:.88em; }
-        </style>
-        """,
-        unsafe_allow_html=True,
-    )
+    if "forge_custom" not in st.session_state:
+        preset, custom = from_query(st.query_params)
+        st.session_state.forge_preset = preset
+        st.session_state.forge_custom = asdict(custom)
+    custom = validated(st.session_state.forge_custom)
+    with st.sidebar.expander("Appearance", expanded=False):
+        preset = st.selectbox("Theme", [*PRESETS, "Custom"], key="forge_preset")
+        if preset == "Custom":
+            for name, value in asdict(custom).items():
+                st.session_state.setdefault("forge_" + name, value)
+            values = {
+                "accent": st.color_picker("Accent", key="forge_accent"),
+                "background": st.color_picker("Background", key="forge_background"),
+                "font": st.selectbox("Font", ["monospace", "sans"], key="forge_font"),
+                "density": st.selectbox("Density", ["Compact", "Comfortable", "Spacious"], key="forge_density"),
+                "radius": st.slider("Corner radius", 0, 16, key="forge_radius", format="%d px"),
+                "glow": st.toggle("Glow and gradients", key="forge_glow"),
+                "scanlines": st.toggle("Scanline accents", key="forge_scanlines"),
+            }
+            custom = validated(values)
+            st.session_state.forge_custom = asdict(custom)
+            if contrast(custom.accent, custom.background) < 3:
+                st.warning("Accent contrast is low. Choose a lighter or darker accent for readable labels and focus outlines.")
+        st.caption("Copy the browser URL to share this appearance. Terminal restores the default. Native charts and table canvases keep Streamlit’s startup palette.")
+    _sync_url(preset, custom)
+    st.markdown(build_css(custom if preset == "Custom" else PRESETS[preset]), unsafe_allow_html=True)

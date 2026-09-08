@@ -4,6 +4,8 @@ Changes to parser output, event identity, and storage layout are recorded here. 
 
 ## Unreleased
 
+- Replace the decorative default theme with compact Terminal styling. Add three alternative presets and a collapsed Custom appearance panel with validated, shareable URL settings. See [appearance controls and limitations](docs/appearance.md).
+
 - Add an offline `python -m ulpf demo` and bounded `normalize` CLI with machine-readable output, rejection diagnostics, and documented exit codes.
 - Reject duplicate/non-finite JSON values and malformed CSV documents; retain invalid UTF-8 bytes in quarantine metadata. Reject boolean and fractional ports, normalize naive observation times consistently, and keep record hashes consistent with stored payloads.
 - Export event IDs in OCSF metadata and let investigators load a finding's supporting normalized records directly.

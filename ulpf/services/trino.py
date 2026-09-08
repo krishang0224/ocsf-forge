@@ -16,6 +16,7 @@ from trino.dbapi import connect
 
 from ulpf.config import Settings, settings
 from ulpf.models import IngestionResult, NormalizedEvent
+from ulpf.services.sql_guard import scrub_sql
 from ulpf.sql import LAKEHOUSE_SETUP
 
 READ_ONLY_PREFIXES = {"SELECT", "SHOW", "DESCRIBE", "DESC", "EXPLAIN", "WITH", "TABLE", "VALUES"}
@@ -80,19 +81,27 @@ class TrinoService:
         row_limit: int | None = None,
     ):
         cursor = connection.cursor()
-        cursor.execute(statement, params)
-        rows = cursor.fetchmany(row_limit) if row_limit is not None else cursor.fetchall()
-        columns = [column[0] for column in cursor.description] if cursor.description else []
-        return columns, rows
+        try:
+            cursor.execute(statement, params)
+            rows = cursor.fetchmany(row_limit) if row_limit is not None else cursor.fetchall()
+            columns = [column[0] for column in cursor.description] if cursor.description else []
+            return columns, rows
+        finally:
+            try:
+                cursor.close()
+            except Exception:
+                LOGGER.warning("Failed to close Trino cursor", exc_info=True)
 
     def query(self, statement: str, enforce_read_only: bool = True) -> tuple[pd.DataFrame, float]:
         sql = statement.strip()
         if not sql:
             raise ValueError("Enter a SQL statement.")
-        if BLOCKED_MULTI_STATEMENT.search(sql.rstrip(";")):
+        scrubbed = scrub_sql(sql).strip()
+        if not scrubbed or not scrubbed.strip(";").strip():
+            raise ValueError("Enter a SQL statement.")
+        if BLOCKED_MULTI_STATEMENT.search(scrubbed.rstrip(";")):
             raise UnsafeQueryError("Run one SQL statement at a time.")
-        first_keyword = re.sub(r"^\s*(?:--[^\n]*\n|/\*.*?\*/\s*)*", "", sql, flags=re.S).split(maxsplit=1)[0].upper()
-        scrubbed = re.sub(r"'(?:''|[^'])*'|\"(?:\"\"|[^\"])*\"|--[^\n]*|/\*.*?\*/", " ", sql, flags=re.S)
+        first_keyword = scrubbed.split(maxsplit=1)[0].upper()
         is_read_only = first_keyword in READ_ONLY_PREFIXES and not MUTATING_KEYWORDS.search(scrubbed)
         if enforce_read_only and not self.config.allow_mutating_sql and not is_read_only:
             raise UnsafeQueryError("This console is read-only. Set ULPF_ALLOW_MUTATING_SQL=true to enable DDL and DML.")
@@ -185,7 +194,7 @@ class TrinoService:
                 duplicates = input_duplicates + len(items) - committed - quarantined
                 _, snapshot_rows = self._execute_on_connection(
                     connection,
-                    'SELECT max(snapshot_id) FROM iceberg.logging."application_logs$snapshots"',
+                    'SELECT snapshot_id FROM iceberg.logging."application_logs$snapshots" ORDER BY committed_at DESC LIMIT 1',
                 )
                 snapshot_id = snapshot_rows[0][0] if snapshot_rows else None
                 status = "COMPLETED_WITH_QUARANTINE" if quarantined else "COMPLETED"

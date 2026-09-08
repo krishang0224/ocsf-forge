@@ -117,7 +117,7 @@ class OCSFNormalizer:
             return None, ""
         try:
             port = int(value)
-        except (TypeError, ValueError):
+        except (TypeError, ValueError, OverflowError):
             return None, f"Invalid {label} port: {value}"
         return (port, "") if 0 <= port <= 65535 else (None, f"Invalid {label} port: {value}")
 

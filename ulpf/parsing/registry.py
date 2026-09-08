@@ -22,10 +22,9 @@ class ParserRegistry:
         candidates = [
             parser for parser in self.parsers if forced_format is None or parser.source_format == forced_format
         ]
-        ranked = sorted(
-            ((parser.detect(value), parser) for parser in candidates), key=lambda item: item[0], reverse=True
+        confidence, parser = max(
+            ((parser.detect(value), parser) for parser in candidates), key=lambda item: item[0], default=(0.0, None)
         )
-        confidence, parser = ranked[0] if ranked else (0.0, None)
         if parser is None or (forced_format is None and confidence <= 0):
             return (
                 "unknown",
@@ -34,7 +33,10 @@ class ParserRegistry:
                 0.0,
                 {"_parsed": False, "parse_notes": "No parser recognized the event"},
             )
-        parsed = parser.parse(value, observed)
+        try:
+            parsed = parser.parse(value, observed)
+        except (ValueError, TypeError, OverflowError, RecursionError) as exc:
+            parsed = {"_parsed": False, "parse_notes": f"Invalid {parser.name} event: {type(exc).__name__}: {str(exc)[:200]}"}
         parsed.setdefault("_parsed", False)
         return parser.source_format, parser.name, parser.version, confidence, parsed
 

@@ -1,15 +1,14 @@
 """Kafka micro-batch worker with offset-based idempotency and backpressure."""
 
-import json
 import os
 import signal
 import threading
-from datetime import UTC, datetime
 
 from kafka import KafkaConsumer, KafkaProducer
 
 from ulpf.pipeline import EventProcessor
 from ulpf.services.trino import TrinoService
+from ulpf.streaming.records import parse_record, publish_dead_letters
 from ulpf.streaming.retry import ingest_with_retry, initialize_with_retry
 
 
@@ -49,38 +48,11 @@ def main() -> None:
             records = [record for partition in polled.values() for record in partition]
             if not records:
                 continue
-            events = []
-            for record in records:
-                observed = datetime.fromtimestamp(record.timestamp / 1000, UTC)
-                source_id = f"kafka:{record.topic}:{record.partition}"
-                event = processor.run(
-                    [record.value.decode("utf-8", errors="replace")],
-                    source_id=source_id,
-                    source_name=record.topic,
-                    source_offset_start=record.offset,
-                    observed_at=observed,
-                )[0]
-                events.append(event)
+            events = [parse_record(processor, record) for record in records]
             result = ingest_with_retry(trino, events, stopped)
             if result is None:
                 break
-            for event in events:
-                if not event.parse_success:
-                    producer.send(
-                        dead_letter_topic,
-                        key=event.event_id.encode(),
-                        value=json.dumps(
-                            {
-                                "event_id": event.event_id,
-                                "source_id": event.source_id,
-                                "source_offset": event.source_offset,
-                                "error": event.parse_notes,
-                                "raw_payload": event.original_raw_payload,
-                            },
-                            separators=(",", ":"),
-                        ).encode(),
-                    )
-            producer.flush()
+            publish_dead_letters(producer, dead_letter_topic, events)
             if result.status in {"COMPLETED", "COMPLETED_WITH_QUARANTINE"}:
                 consumer.commit()
     finally:

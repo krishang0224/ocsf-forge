@@ -34,7 +34,7 @@ class RecordingTrino(TrinoService):
         if statement.startswith("SELECT count(*) FROM"):
             table = next(name for name in self.counts if name in statement)
             return (["count"], [[self.counts[table]]])
-        if "max(snapshot_id)" in statement:
+        if 'ORDER BY committed_at DESC LIMIT 1' in statement:
             return (["snapshot_id"], [[123]])
         return (["value"], [[1]]) if statement.lstrip().upper().startswith("SELECT") else ([], [])
 
@@ -43,6 +43,17 @@ def test_read_only_console_accepts_select():
     client = RecordingTrino()
     result, _ = client.query("SELECT 1")
     assert result.iloc[0, 0] == 1
+
+
+@pytest.mark.parametrize("statement", ["SELECT '; DELETE FROM x'", 'SELECT "drop" FROM example', "/* DROP */ SELECT 1; -- comment"])
+def test_console_ignores_literals_and_comments(statement):
+    RecordingTrino().query(statement)
+
+
+@pytest.mark.parametrize("statement", ["-- comment", "/* comment */", "SELECT 'unterminated", "SELECT 1 /* unfinished"])
+def test_console_rejects_empty_or_unterminated_sql(statement):
+    with pytest.raises(ValueError):
+        RecordingTrino().query(statement)
 
 
 @pytest.mark.parametrize(

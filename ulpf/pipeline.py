@@ -4,48 +4,40 @@ import csv
 import hashlib
 import io
 import json
+import re
 import xml.etree.ElementTree as ET
 from datetime import UTC, datetime
+from itertools import islice
 
 import pandas as pd
 
 from ulpf.models import NormalizedEvent
 from ulpf.normalizer import OCSFNormalizer
 from ulpf.parsers import LogParserEngine
+from ulpf.parsing.structured import MAPPED_FIELDS
 
-CSV_FIELDS = {
-    "@timestamp",
-    "action",
-    "event",
-    "event_type",
-    "host",
-    "hostname",
-    "level",
-    "message",
-    "severity",
-    "source_ip",
-    "src_ip",
-    "time",
-    "timestamp",
-    "user",
-    "username",
-}
+CSV_FIELDS = MAPPED_FIELDS | {"status", "outcome"}
 
 
 def _logical_events(lines: list[str] | tuple[str, ...], is_log4j) -> list[tuple[int, str]]:
     events: list[tuple[int, str]] = []
+    chunks: list[str] = []
+    offset = 0
     accepts_continuations = False
     for index, line in enumerate(lines):
         stripped = line.lstrip()
-        continuation = accepts_continuations and bool(events) and (
+        continuation = accepts_continuations and bool(chunks) and (
             line[:1].isspace() or stripped.startswith(("at ", "Caused by:", "Suppressed:"))
         )
         if continuation:
-            offset, existing = events[-1]
-            events[-1] = (offset, f"{existing}\n{line}")
+            chunks.append(line)
         elif line.strip():
-            events.append((index, line))
+            if chunks:
+                events.append((offset, "\n".join(chunks)))
+            offset, chunks = index, [line]
             accepts_continuations = is_log4j(line)
+    if chunks:
+        events.append((offset, "\n".join(chunks)))
     return events
 
 
@@ -125,18 +117,18 @@ class EventProcessor:
 
 
 def run_payload(payload: bytes, filename: str = "upload.log", source_id: str | None = None) -> list[NormalizedEvent]:
-    text = payload.decode("utf-8", errors="replace")
+    text = payload.decode("utf-8-sig", errors="replace")
     identity = source_id or hashlib.sha256(payload).hexdigest()
     lowered = filename.lower()
     try:
-        decoded = json.loads(text)
-    except ValueError:
+        decoded = json.loads(text) if text.lstrip().startswith(("{", "[")) else None
+    except (ValueError, RecursionError):
         decoded = None
     if isinstance(decoded, dict | list):
         records = decoded if isinstance(decoded, list) else [decoded]
         lines = [json.dumps(item, separators=(",", ":"), ensure_ascii=False) for item in records]
         return run_pipeline(lines, source_id=identity, source_name=filename, forced_format="json")
-    if lowered.endswith(".xml") or text.lstrip().startswith("<"):
+    if lowered.endswith(".xml") or re.match(r"<(?:[A-Za-z_:]|\?)", text.lstrip()):
         try:
             root = ET.fromstring(text)
         except ET.ParseError:
@@ -150,18 +142,18 @@ def run_payload(payload: bytes, filename: str = "upload.log", source_id: str | N
             dialect = csv.Sniffer().sniff(text[:8192], delimiters=",;\t")
         except csv.Error:
             dialect = csv.excel
-        rows = [_normalize_csv_row(row) for row in csv.DictReader(io.StringIO(text), dialect=dialect)]
-        lines = [json.dumps(row, separators=(",", ":"), ensure_ascii=False) for row in rows]
+        lines = [json.dumps(_normalize_csv_row(row), separators=(",", ":"), ensure_ascii=False)
+                 for row in csv.DictReader(io.StringIO(text), dialect=dialect)]
         return run_pipeline(lines, source_id=identity, source_name=filename, forced_format="csv")
     return run_pipeline(text.splitlines(), source_id=identity, source_name=filename)
 
 
 def _looks_like_csv(text: str) -> bool:
-    lines = [line for line in text.splitlines() if line.strip()]
+    lines = list(islice((line for line in io.StringIO(text[:8192]) if line.strip()), 20))
     if len(lines) < 2:
         return False
     try:
-        dialect = csv.Sniffer().sniff("\n".join(lines[:20]), delimiters=",;\t")
+        dialect = csv.Sniffer().sniff("".join(lines), delimiters=",;\t")
         header = next(csv.reader([lines[0]], dialect=dialect))
     except (csv.Error, StopIteration):
         return False

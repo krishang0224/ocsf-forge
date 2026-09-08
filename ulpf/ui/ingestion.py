@@ -9,12 +9,12 @@ from ulpf.pipeline import events_to_frame, run_payload, run_pipeline
 from ulpf.sample_data import SAMPLE_LOGS
 
 
-@st.cache_data(show_spinner=False, max_entries=12)
+@st.cache_data(ttl=300, show_spinner=False, max_entries=12)
 def _cached_lines(lines: tuple[str, ...], source_id: str, source_name: str) -> list:
     return run_pipeline(lines, source_id=source_id, source_name=source_name)
 
 
-@st.cache_data(show_spinner=False, max_entries=6)
+@st.cache_data(ttl=300, show_spinner=False, max_entries=6)
 def _cached_payload(payload: bytes, filename: str) -> list:
     return run_payload(payload, filename)
 
@@ -43,7 +43,11 @@ def render_ingestion_controls() -> tuple[list, bool]:
             height=180,
             placeholder='{"timestamp":"2026-01-01T10:00:00Z","level":"error","message":"..."}',
         )
-        events = _cached_payload(raw.encode(), "Pasted events") if raw.strip() else []
+        payload = raw.encode()
+        if len(payload) > settings.max_upload_bytes:
+            st.error(f"Pasted input exceeds the {settings.max_upload_bytes / 1_048_576:.0f} MB interactive limit.")
+        else:
+            events = _cached_payload(payload, "Pasted events") if raw.strip() else []
 
     parsed = sum(event.parse_success for event in events)
     if events:
@@ -57,7 +61,9 @@ def render_batch_preview(events: list) -> None:
     if not events:
         st.info("Choose a source in the left panel to prepare a batch.")
         return
-    frame = events_to_frame(events)
+    frame = events_to_frame(events[:1000])
+    if len(events) > 1000:
+        st.caption(f"Previewing 1,000 of {len(events):,} events. Ingestion and downloads include the complete batch.")
     columns = [
         "timestamp",
         "severity",
@@ -73,6 +79,9 @@ def render_batch_preview(events: list) -> None:
         "parse_notes",
     ]
     st.dataframe(frame[columns], width="stretch", height=420, hide_index=True)
+    if not st.button("Prepare full-batch downloads"):
+        return
+    frame = events_to_frame(events)
     left, right = st.columns(2)
     left.download_button(
         "Download JSONL",
@@ -80,5 +89,6 @@ def render_batch_preview(events: list) -> None:
         "normalized_logs.jsonl",
         "application/x-ndjson",
         width="stretch",
+        on_click="ignore",
     )
-    right.download_button("Download CSV", frame.to_csv(index=False), "normalized_logs.csv", "text/csv", width="stretch")
+    right.download_button("Download CSV", frame.to_csv(index=False), "normalized_logs.csv", "text/csv", width="stretch", on_click="ignore")

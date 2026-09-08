@@ -4,13 +4,6 @@ import re
 from datetime import UTC, datetime
 
 
-def _port(value) -> int | None:
-    try:
-        return int(value) if value not in (None, "") else None
-    except (TypeError, ValueError):
-        return None
-
-
 class Log4jParser:
     name = "log4j"
     source_format = "log4j"
@@ -125,7 +118,7 @@ class ApacheParser:
 class SyslogParser:
     name = "syslog"
     source_format = "syslog"
-    version = "2.0.0"
+    version = "2.1.0"
     rfc5424 = re.compile(
         r"^<(?P<pri>\d{1,3})>(?P<version>\d+)\s+(?P<ts>\S+)\s+(?P<host>\S+)\s+(?P<app>\S+)\s+(?P<pid>\S+)\s+(?P<msgid>\S+)\s+(?P<structured>(?:-|\[.*?]))(?:\s+(?P<msg>.*))?$",
         re.S,
@@ -144,10 +137,14 @@ class SyslogParser:
 
     @staticmethod
     def _nearest_year(timestamp: str, observed_at: datetime) -> datetime:
-        candidates = [
-            datetime.strptime(f"{year} {timestamp}", "%Y %b %d %H:%M:%S").replace(tzinfo=observed_at.tzinfo or UTC)
-            for year in (observed_at.year - 1, observed_at.year, observed_at.year + 1)
-        ]
+        candidates = []
+        for year in (observed_at.year - 1, observed_at.year, observed_at.year + 1):
+            try:
+                candidates.append(datetime.strptime(f"{year} {timestamp}", "%Y %b %d %H:%M:%S").replace(tzinfo=observed_at.tzinfo or UTC))
+            except ValueError:
+                continue
+        if not candidates:
+            raise ValueError("Invalid RFC3164 timestamp")
         return min(candidates, key=lambda item: abs((item - observed_at).total_seconds()))
 
     def parse(self, value: str, observed_at: datetime) -> dict:
@@ -194,8 +191,8 @@ class SyslogParser:
             "status": "Failure" if denied else "Success",
             "src_endpoint_ip": kv.get("src") or kv.get("srcip") or kv.get("src_ip", ""),
             "dst_endpoint_ip": kv.get("dst") or kv.get("dstip") or kv.get("dst_ip", ""),
-            "src_endpoint_port": _port(kv.get("sport")),
-            "dst_endpoint_port": _port(kv.get("dport")),
+            "src_endpoint_port": kv.get("sport"),
+            "dst_endpoint_port": kv.get("dport"),
             "device_product": kv.get("deviceProduct") or app,
             "metadata": {**extra, **kv},
             "ocsf_class": "Network Activity",

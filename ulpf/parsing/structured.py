@@ -2,6 +2,9 @@
 
 import json
 from datetime import datetime
+from ipaddress import ip_address
+
+from ulpf.parsing.authentication import authentication_action
 
 MAPPED_FIELDS = {
     "@timestamp",
@@ -41,6 +44,9 @@ MAPPED_FIELDS = {
 
 
 def structured_record(item: dict, observed_at: datetime) -> dict:
+    malformed = [key for key in MAPPED_FIELDS if isinstance(item.get(key), dict | list)]
+    if malformed:
+        return {"_parsed": False, "parse_notes": f"Expected scalar fields: {', '.join(sorted(malformed))}", "metadata": item}
     raw_severity = str(item.get("severity", item.get("level", item.get("risk", "Informational")))).lower()
     severity = {
         "info": "Informational",
@@ -53,50 +59,57 @@ def structured_record(item: dict, observed_at: datetime) -> dict:
     }.get(raw_severity, raw_severity.title())
     action = str(item.get("event_type", item.get("action", item.get("operation", "Observed"))))
     denied = action.lower().replace(" ", "_") in {"login_failure", "denied", "blocked", "failed_login"}
-    is_auth = any(token in action.lower() for token in ("login", "logon", "auth"))
+    auth = authentication_action(action, item)
+    is_auth = auth is not None
+    status = auth[2] if auth else "Failure" if denied else "Success"
     activity_id, activity_name = {
         "create": (1, "Create"),
         "read": (2, "Read"),
         "update": (3, "Update"),
         "delete": (4, "Delete"),
     }.get(action.lower(), (99, action or "Other"))
+    server = str(item.get("server") or "")
+    try:
+        server_ip = str(ip_address(server)) if server else ""
+    except ValueError:
+        server_ip = ""
+    message = item.get("message", item.get("event"))
+    if message is None:
+        message = json.dumps(item, default=str)[:2000]
     return {
         "_parsed": True,
         "timestamp": str(item.get("timestamp", item.get("@timestamp", item.get("time", "")))),
         "timestamp_missing_ok": not any(key in item for key in ("timestamp", "@timestamp", "time")),
-        "hostname": item.get("host", item.get("hostname", item.get("source", ""))),
-        "user": item.get("user", item.get("username", item.get("actor", ""))),
-        "message": item.get("message", item.get("event", json.dumps(item, default=str)[:2000])),
+        "hostname": str(item.get("host", item.get("hostname", item.get("source", server))) or ""),
+        "user": str(item.get("user", item.get("username", item.get("actor", ""))) or ""),
+        "message": message,
         "severity": severity,
         "action": "Login Failure" if denied and is_auth else action,
-        "disposition": "Failed" if denied else "Success",
-        "status": "Failure" if denied else "Success",
+        "disposition": "Failed" if status == "Failure" else status,
+        "status": status,
         "src_endpoint_ip": item.get("src_ip", item.get("source_ip", item.get("client_ip", item.get("ip", "")))),
         "src_endpoint_port": item.get("src_port", item.get("source_port", item.get("client_port"))),
-        "dst_endpoint_ip": item.get("dst_ip", item.get("destination_ip", item.get("server", ""))),
+        "dst_endpoint_ip": item.get("dst_ip", item.get("destination_ip", server_ip)),
         "dst_endpoint_port": item.get("dst_port", item.get("destination_port", item.get("server_port"))),
-        "device_vendor": item.get("vendor", "Application"),
-        "device_product": item.get("service", item.get("app", "application")),
+        "device_vendor": str(item.get("vendor") or "Application"),
+        "device_product": str(item.get("service", item.get("app")) or "application"),
         "metadata": {key: value for key, value in item.items() if key not in MAPPED_FIELDS},
         "ocsf_class": "Authentication" if is_auth else "API Activity",
         "class_uid": 3002 if is_auth else 6003,
         "category": "Identity & Access Management" if is_auth else "Application Activity",
         "category_uid": 3 if is_auth else 6,
-        "activity_id": 1 if is_auth else activity_id,
-        "activity_name": "Logon" if is_auth else activity_name,
+        "activity_id": auth[0] if auth else activity_id,
+        "activity_name": auth[1] if auth else activity_name,
     }
 
 
 class JsonParser:
     name = "json"
     source_format = "json"
-    version = "2.0.0"
+    version = "2.1.0"
 
     def detect(self, value: str) -> float:
-        try:
-            return 0.95 if isinstance(json.loads(value), dict) else 0.0
-        except (TypeError, ValueError):
-            return 0.0
+        return 0.95 if value.lstrip().startswith("{") else 0.0
 
     def parse(self, value: str, observed_at: datetime) -> dict:
         try:
@@ -113,14 +126,15 @@ class JsonParser:
 class CsvRowParser:
     name = "csv"
     source_format = "csv"
-    version = "1.0.0"
+    version = "1.1.0"
 
     def detect(self, value: str) -> float:
         return 0.0
 
     def parse(self, value: str, observed_at: datetime) -> dict:
         try:
-            return structured_record(json.loads(value), observed_at)
+            item = json.loads(value)
+            return structured_record(item, observed_at) if isinstance(item, dict) else {"_parsed": False, "parse_notes": "CSV row must be an object"}
         except (TypeError, ValueError):
             return {"_parsed": False, "parse_notes": "Invalid normalized CSV row"}
 
@@ -128,7 +142,7 @@ class CsvRowParser:
 class XmlEventParser:
     name = "xml"
     source_format = "xml"
-    version = "1.1.0"
+    version = "1.2.0"
 
     def detect(self, value: str) -> float:
         return 0.8 if value.lstrip().startswith("<") and value.rstrip().endswith(">") else 0.0

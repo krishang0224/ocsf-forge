@@ -4,6 +4,12 @@ Changes to parser output, event identity, and storage layout are recorded here. 
 
 ## Unreleased
 
+- Preserve pasted Syslog records, BOM-prefixed JSON, hostname-valued servers, and malformed records without aborting the batch. Authentication outcomes must be explicit; ambiguous login events no longer imply success, and conflicting outcomes are quarantined.
+- Decode JSON once and assemble multiline traces with a single join. Bound ingestion previews and defer full-batch exports until requested.
+- Close Trino cursors after limited queries, recognize quoted SQL correctly, and select audit snapshots by commit time instead of snapshot ID.
+- Quarantine Kafka tombstones, empty messages, and invalid UTF-8; preserve invalid bytes in base64 metadata. Require successful dead-letter acknowledgments before committing offsets.
+- These parser changes affect new ingestion only. Existing rows and findings are not rewritten by replay; review historical authentication findings before relying on them.
+
 - Add an optional authentication detection worker, an additive `detections` table, a Findings view, and a synthetic demo. See [detection operations](docs/detection.md) for thresholds, backfills, and rollback.
 - Restrict the detector's table permissions to reading normalized events and managing findings; allow analysts to read findings.
 

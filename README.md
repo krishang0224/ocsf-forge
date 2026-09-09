@@ -12,18 +12,18 @@ An optional detection worker identifies repeated authentication failures, possib
 
 The project exists for a familiar reason: collecting logs is easy; making eight incompatible formats useful in the same query is not.
 
-![Dashboard showing event totals, severity distribution, and services](docs/images/dashboard.png)
+![Terminal-theme dashboard showing stored event totals, severity distribution, services, and recent events](docs/images/dashboard.png)
 
-Screenshots use the bundled synthetic sample logs. [Why OCSF?](docs/why-ocsf.md)
+Screenshots captured from the running app on September 9, 2026, using retained bundled samples and the synthetic authentication demo. Counts and quarantine rates reflect that historical demo data, not a fresh run or a throughput benchmark. [Why OCSF?](docs/why-ocsf.md)
 
 [Evaluation guide and verification checkpoint](docs/evaluation.md) · [Contribute a parser](docs/parser-development.md)
 
 <details>
 <summary>SQL workspace and ingestion results</summary>
 
-![SQL workspace with a query and results from Iceberg](docs/images/sql-workspace.png)
+![Terminal-theme SQL workspace querying three authentication findings from Iceberg](docs/images/sql-workspace.png)
 
-![Ingestion quality showing a completed sample run](docs/images/ingestion.png)
+![Ingestion quality showing parser coverage and historical completed and quarantined demo runs](docs/images/ingestion.png)
 
 </details>
 
@@ -87,6 +87,19 @@ Useful local endpoints:
 
 All ports bind to loopback. Named volumes keep the warehouse, catalog, and Kafka state when containers are recreated. `docker compose down --volumes` deletes that state permanently.
 
+## Make the workspace yours
+
+Terminal is the default: compact spacing, monospace text, sharp corners, and no glow. Open the collapsed **Appearance** sidebar panel for Solarized, High Contrast, Cyberpunk, or Custom. Custom controls cover accent/background, font, density, corners, glow, and scanlines. Settings survive reruns and can be shared by copying the browser URL.
+
+<details>
+<summary>Preview the appearance controls</summary>
+
+![Custom appearance controls alongside the dashboard, retaining the compact Terminal palette](docs/images/appearance.png)
+
+</details>
+
+Native table canvases and charts do not fully inherit per-session CSS changes. See [appearance controls and tradeoffs](docs/appearance.md).
+
 ## What is already handled
 
 - CEF extension values containing spaces and escaped delimiters
@@ -142,7 +155,7 @@ Upload the generated file and ingest it. The 15 synthetic events produce three l
 
 Select a finding and choose **Load supporting events** to inspect its normalized evidence without copying IDs into SQL. Missing retained evidence is reported explicitly.
 
-![Three authentication findings with rule details and source evidence IDs](docs/images/detections.png)
+![Terminal-theme Findings view with three authentication alerts, selected rule, and source evidence IDs](docs/images/detections.png)
 
 ## Operate it
 

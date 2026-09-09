@@ -4,6 +4,8 @@ Changes to parser output, event identity, and storage layout are recorded here. 
 
 ## Unreleased
 
+- Refresh README dashboard, SQL, ingestion, and findings screenshots for the Terminal theme. Add an Appearance preview and clarify the capture date and historical synthetic-data context.
+
 - Replace the decorative default theme with compact Terminal styling. Add three alternative presets and a collapsed Custom appearance panel with validated, shareable URL settings. See [appearance controls and limitations](docs/appearance.md).
 
 - Add an offline `python -m ulpf demo` and bounded `normalize` CLI with machine-readable output, rejection diagnostics, and documented exit codes.

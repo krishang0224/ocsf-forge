@@ -4,6 +4,10 @@ The default Terminal preset uses a neutral dark palette, one mint accent, monosp
 
 Presets: Terminal, Solarized (dark teal), High Contrast (black/yellow), and Cyberpunk (purple, rounded, subtle glow). Custom exposes accent/background, monospace or sans font, three density levels, 0–16 px corners, glow/gradients, and scanlines. Low accent contrast produces a warning; foreground and button text are derived for contrast.
 
+![Custom appearance controls in the running dashboard](images/appearance.png)
+
+Captured September 9, 2026, with Custom retaining the Terminal palette and effects disabled. The other dashboard screenshots in the README use the default Terminal preset.
+
 Settings survive Streamlit reruns and switching away from Custom. Copy the browser URL to share a preset or custom appearance. Only validated `ui_*` appearance keys are read; unrelated query parameters are preserved. Selecting Terminal removes appearance parameters. URLs initialize new sessions; changing the URL in place without starting a new session does not override active widget state. This is session/URL persistence, not an account or device preference store.
 
 ## Integration

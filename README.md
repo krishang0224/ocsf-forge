@@ -63,7 +63,11 @@ python -m ulpf demo
 python -m ulpf normalize your-logs.jsonl > normalized.jsonl
 ```
 
-The synthetic demo prints three findings, including their rule IDs and supporting event IDs. It uses the same parser and rule code as the lakehouse, but does not connect to storage. Normalization writes accepted OCSF records to stdout and rejection diagnostics plus a summary to stderr. Exit codes: `0` no rejections (including empty input), `1` rejected records present, `2` input/usage error. Input is bounded to 25 MiB by default; this is a batch evaluator, not a streaming substitute. Keep the source file: the CLI does not persist quarantine or raw evidence.
+The synthetic demo prints three findings, including their rule IDs and supporting event IDs. It uses the same parser and rule code as the lakehouse, but does not connect to storage. Normalization writes accepted OCSF records to stdout and rejection diagnostics plus a summary to stderr. Exit codes: `0` no rejections (including empty input), `1` rejected records present, `2` input/usage error. Input is bounded to 25 MiB and 50,000 events by default (`--max-bytes` / `--max-events`); this is a batch evaluator, not a streaming substitute. Keep the source file: the CLI does not persist quarantine or raw evidence.
+
+### Run the dashboard without Docker
+
+[Homelab mode](docs/homelab-mode.md) stores raw, normalized, and quarantined events in a local DuckDB file. Install `requirements-homelab.txt` in a clean environment, explicitly set `ULPF_BACKEND=duckdb`, and start Streamlit. It has no external services, Kafka worker, or scheduled detection worker. Trino remains the default; a failed connection never activates DuckDB.
 
 ### Start the full lakehouse
 
@@ -75,6 +79,8 @@ docker compose up --build -d
 ```
 
 Open [localhost:8501](http://localhost:8501), choose Sample, Upload, or Paste, and commit the batch. The dashboard shows parser quality, quarantine counts, ingestion runs, and Iceberg file health.
+
+Both dashboards limit interactive input to 25 MiB and 50,000 events before normalization. `ULPF_MAX_UPLOAD_BYTES` and `ULPF_MAX_UPLOAD_EVENTS` configure those limits; raising them also raises memory risk. Rejected oversized input is not ingested or silently truncated.
 
 Useful local endpoints:
 
@@ -133,6 +139,8 @@ These numbers came from the local Compose stack on a 16 GB development machine. 
 The first load test exposed real Iceberg conflicts and Trino's 1 MB query-text ceiling. The current writer retries idempotent commits and splits batches by both row count and encoded parameter size.
 
 CI runs lint, tests, and Compose configuration validation on pushes and pull requests. It does not reproduce the live throughput benchmarks above.
+
+For the newer homelab implementation, see the [September 10 stress audit](docs/stress-testing.md): workloads, reproducible commands, fault recovery, and the single-transaction memory limit. The earlier table above is a separate development baseline, not a comparison against the resource-limited audit stack.
 
 ## Stream from Kafka
 

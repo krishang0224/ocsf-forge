@@ -118,7 +118,7 @@ class ApacheParser:
 class SyslogParser:
     name = "syslog"
     source_format = "syslog"
-    version = "2.1.0"
+    version = "2.1.1"
     rfc5424 = re.compile(
         r"^<(?P<pri>\d{1,3})>(?P<version>\d+)\s+(?P<ts>\S+)\s+(?P<host>\S+)\s+(?P<app>\S+)\s+(?P<pid>\S+)\s+(?P<msgid>\S+)\s+(?P<structured>(?:-|\[.*?]))(?:\s+(?P<msg>.*))?$",
         re.S,
@@ -127,7 +127,7 @@ class SyslogParser:
         r"^(?P<pri><\d+>)?(?P<ts>(?P<mon>[A-Z][a-z]{2})\s+(?P<day>\d{1,2})\s(?P<time>\d{2}:\d{2}:\d{2}))\s+(?P<host>\S+)\s+(?P<tag>[\w\-/.]+)?(?:\[(?P<pid>\d+)])?:\s*(?P<msg>.*)$",
         re.S,
     )
-    key_values = re.compile(r"([\w.-]+)=(\"(?:\\.|[^\"])*\"|\S+)")
+    key_values = re.compile(r'(?<![\w.-])([\w.-]+)=("(?:\\.|[^"\\])*"|\S+)')
 
     def detect(self, value: str) -> float:
         text = value.strip()
@@ -172,7 +172,10 @@ class SyslogParser:
             message = item.get("msg") or ""
             app = item.get("tag") or "syslog"
             extra = {"rfc": 3164, "priority": int((item.get("pri") or "<13>")[1:-1]), "pid": item.get("pid")}
-        kv = {key: field.strip('"').replace('\\"', '"') for key, field in self.key_values.findall(message)}
+        kv = {
+            key: (field[1:-1] if field.startswith('"') and field.endswith('"') else field).replace('\\"', '"')
+            for key, field in self.key_values.findall(message)
+        }
         lowered = message.lower()
         denied = any(word in lowered for word in ("deny", "drop", "block", "reject"))
         return {

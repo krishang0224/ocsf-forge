@@ -10,7 +10,7 @@ from collections.abc import Iterable, Iterator
 from contextlib import contextmanager
 from dataclasses import replace
 from datetime import UTC, datetime
-from itertools import chain
+from itertools import islice
 from pathlib import Path
 from time import perf_counter
 from typing import Any
@@ -157,25 +157,13 @@ class DuckDBBackend(QueryBackend):
         self, connection: duckdb.DuckDBPyConnection, table: str, records: Iterable[dict[str, Any]],
     ) -> None:
         iterator = iter(records)
-        first = next(iterator, None)
-        if first is None:
-            return
-        columns = tuple(first)
-        prefix = f"INSERT INTO iceberg.logging.{table} ({', '.join(columns)}) VALUES "
-        group = f"({', '.join('?' for _ in columns)})"
-        batch: list[tuple] = []
-
-        def flush() -> None:
-            sql = prefix + ", ".join(group for _ in batch) + " ON CONFLICT DO NOTHING"
-            connection.execute(sql, [value for row in batch for value in row])
-            batch.clear()
-
-        for record in chain([first], iterator):
-            batch.append(tuple(record[name] for name in columns))
-            if len(batch) >= self.config.insert_batch_size:
-                flush()
-        if batch:
-            flush()
+        while batch := list(islice(iterator, self.config.insert_batch_size)):
+            columns = tuple(batch[0])
+            statement = (
+                f"INSERT INTO iceberg.logging.{table} ({', '.join(columns)}) "
+                f"SELECT {', '.join('unnest(?)' for _ in columns)} ON CONFLICT DO NOTHING"
+            )
+            connection.execute(statement, [[record[name] for record in batch] for name in columns])
 
     def insert_events(self, events: Iterable[NormalizedEvent]) -> int:
         return self.ingest_events(events).committed

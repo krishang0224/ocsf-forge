@@ -2,7 +2,7 @@
 
 Homelab mode uses the existing parsers, normalization pipeline, event IDs and OCSF export unchanged, with an embedded DuckDB database instead of external storage services. It is for local, modest-volume investigation—not a smaller distributed lakehouse.
 
-**Explicit opt-in only.** The default remains `trino`. The existing `requirements.txt`, `docker-compose.yml`, `.env` instructions and lakehouse workers are unchanged. A failed Trino connection never activates DuckDB.
+**Explicit opt-in only.** The default remains `trino`. The full-stack requirements, Compose deployment and lakehouse workers remain available; no local-storage service is added to Compose. A failed Trino connection never activates DuckDB.
 
 ## Start without Docker
 
@@ -46,8 +46,11 @@ Generic parsing is unchanged: this does not introduce dedicated Pi-hole, WireGua
 | `ULPF_QUERY_ROW_LIMIT` | `1000` | Maximum rows fetched by each read |
 | `ULPF_INSERT_BATCH_SIZE` | `500` | Bound-parameter batch size inside a transaction |
 | `ULPF_MAX_UPLOAD_BYTES` | `26214400` | Shared 25 MiB interactive input limit |
+| `ULPF_MAX_UPLOAD_EVENTS` | `50000` | Shared interactive record limit, checked before normalization |
 
-Large inputs still occupy Python memory during parsing. Row limits constrain results, not the amount of work required by a query; memory settings and query interruption provide additional bounds. Split large files on complete record boundaries.
+Large inputs still occupy Python memory during decoding and parsing. The record limit prevents millions of tiny records from expanding into normalized objects; it is not a process-memory cap. Row limits constrain results, not the amount of work required by a query; memory settings and query interruption provide additional bounds. Split large files on complete record boundaries.
+
+The September 10 stress run passed 250,000 events as separate 10,000-event commits at the default engine limit. A single 100,000-event transaction failed at both 256 MB and 512 MB, rolled back, and left the database usable. Increasing the statement batch size or doubling memory is not a reliable fix for oversized transactions. Use smaller complete input documents; the backend never silently divides an atomic ingestion into separate commits. See [stress results and reproduction](stress-testing.md).
 
 ## Read-only console boundary
 
@@ -66,7 +69,7 @@ Every public DuckDB read method validates a single statement and uses a read-onl
 | SQL examples | Replace Iceberg snapshots with Local tables; omit local-worker findings. Other examples are unchanged; arbitrary user SQL is DuckDB SQL, not automatically translated Trino SQL |
 | Timestamp display | UTC microsecond timestamps retain the source instant; original source text and offset remain separate columns. OCSF interchange keeps its existing millisecond representation |
 | Transactions/replay | One atomic local transaction across event tables, rather than separate recoverable Iceberg table commits; primary keys enforce uniqueness |
-| Parameter binding | Local bound inserts do not use Trino's `EXECUTE IMMEDIATE` text-size splitting or commit-conflict retry loop; DuckDB resource/file-lock limits apply instead |
+| Parameter binding | Local inserts bind one list per column and expand them with `unnest(?)`; parameter count depends on columns, not rows. They do not use Trino's `EXECUTE IMMEDIATE` text-size splitting or commit-conflict retry loop; DuckDB resource/file-lock limits apply instead |
 | Operations | No Iceberg snapshots, catalog, object storage, Kafka integration, scheduled detection worker, or lakehouse maintenance. Existing vendor findings still normalize into `application_logs` unchanged |
 
 ## Implementation and verification
@@ -75,7 +78,7 @@ Every public DuckDB read method validates a single statement and uses a read-onl
 
 ```bash
 pip install pytest==8.4.2
-HOMELAB_ISOLATED=1 pytest -q tests/test_duckdb_backend.py tests/test_homelab_app.py
+HOMELAB_ISOLATED=1 pytest -q tests/test_duckdb_backend.py tests/test_duckdb_recovery.py tests/test_homelab_app.py tests/test_input_limits.py tests/test_parser_resource_safety.py
 ```
 
 Use `HOMELAB_ISOLATED=1` only in the lightweight-only environment; it verifies the lakehouse packages are absent. The separate Homelab CI workflow tests both isolated dependencies and full-driver parity. The original CI workflow and existing tests remain unchanged. Tests cover empty dashboards, all shared analytical queries, OCSF/timestamp round-trips, quarantine, reopen/replay, rollback, concurrent sessions, row limits, query interruption, SQL safety and the actual app route with outbound connections blocked. The backend-to-Trino column-mapping comparison runs only where the Trino package is installed.
@@ -84,4 +87,4 @@ DuckDB references: [Python DB API and read-only connections](https://duckdb.org/
 
 ### Development validation, September 10, 2026
 
-On the development machine, a 2,500-event batch committed in 0.96 seconds and its duplicate replay completed in 1.03 seconds with the default 256 MB DuckDB execution limit and two threads. This is a single-run regression observation, not a Raspberry Pi benchmark or a capacity promise. The same batch is covered by an untimed regression test. The initial per-row insertion implementation exhausted the engine limit; bound multi-row inserts corrected that failure without increasing the configured limit.
+Initial validation used bound multi-row inserts and passed a 2,500-event transaction. The subsequent stress audit replaced row-expanded placeholders with bound column lists: the same-machine 10,000-event comparison improved from 4.31 to 1.27 seconds for insertion and from 3.62 to 1.01 seconds for replay. These are single-run observations, not Raspberry Pi benchmarks or capacity promises. The [stress report](stress-testing.md) includes the failures as well as the successes.

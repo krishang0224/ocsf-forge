@@ -23,6 +23,7 @@ def main(argv=None):
     normalize = commands.add_parser("normalize", help="Emit valid OCSF JSONL; report rejected records on stderr")
     normalize.add_argument("input", help="Input file, or - for standard input")
     normalize.add_argument("--max-bytes", type=int, default=25 * 1024 * 1024, help="Input limit (default: 25 MiB)")
+    normalize.add_argument("--max-events", type=int, default=50000, help="Record limit before normalization (default: 50,000)")
     args = parser.parse_args(argv)
     try:
         if args.command == "demo":
@@ -39,6 +40,8 @@ def main(argv=None):
             return 0
         if args.max_bytes <= 0:
             parser.error("--max-bytes must be positive")
+        if args.max_events <= 0:
+            parser.error("--max-events must be positive")
         if args.input == "-":
             payload = sys.stdin.buffer.read(args.max_bytes + 1)
             filename = "stdin.log"
@@ -48,7 +51,7 @@ def main(argv=None):
             filename = Path(args.input).name
         if len(payload) > args.max_bytes:
             raise ValueError(f"Input exceeds {args.max_bytes} bytes; no records processed")
-        events = run_payload(payload, filename)
+        events = run_payload(payload, filename, max_events=args.max_events)
         rejected = 0
         for event in events:
             if event.parse_success:

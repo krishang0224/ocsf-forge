@@ -41,6 +41,7 @@ class Settings:
     duckdb_memory_limit: str = os.getenv("ULPF_DUCKDB_MEMORY_LIMIT", "256MB")
     duckdb_threads: int = int(os.getenv("ULPF_DUCKDB_THREADS", "2"))
     duckdb_query_timeout: float = float(os.getenv("ULPF_DUCKDB_QUERY_TIMEOUT", "10"))
+    max_upload_events: int = int(os.getenv("ULPF_MAX_UPLOAD_EVENTS", "50000"))
 
     def __post_init__(self):
         if self.backend not in {"trino", "duckdb"}:
@@ -54,7 +55,7 @@ class Settings:
                 raise ValueError("duckdb_threads must be positive")
             if not math.isfinite(self.duckdb_query_timeout) or self.duckdb_query_timeout <= 0:
                 raise ValueError("duckdb_query_timeout must be finite and positive")
-        for name in ("query_row_limit", "insert_batch_size", "trino_max_query_bytes", "max_upload_bytes"):
+        for name in ("query_row_limit", "insert_batch_size", "trino_max_query_bytes", "max_upload_bytes", "max_upload_events"):
             if getattr(self, name) <= 0:
                 raise ValueError(f"{name} must be positive")
         if self.iceberg_commit_retries < 0:

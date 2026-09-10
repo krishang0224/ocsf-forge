@@ -107,7 +107,7 @@ def structured_record(item: dict, observed_at: datetime) -> dict:
 class JsonParser:
     name = "json"
     source_format = "json"
-    version = "2.2.0"
+    version = "2.2.1"
 
     def detect(self, value: str) -> float:
         return 0.95 if value.lstrip().startswith("{") else 0.0

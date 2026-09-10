@@ -29,6 +29,9 @@ def render_sql_console(trino: QueryBackend) -> None:
             result, elapsed = trino.query(sql)
             st.success(f"Completed in {elapsed:.2f}s · {len(result):,} rows shown")
             st.dataframe(result, width="stretch", height=430, hide_index=True)
-            st.download_button("Download results", result.to_csv(index=False), "trino-results.csv", "text/csv")
+            st.download_button(
+                "Download results", result.to_csv(index=False),
+                "duckdb-results.csv" if local else "trino-results.csv", "text/csv", on_click="ignore",
+            )
         except Exception as exc:
             st.error(str(exc))

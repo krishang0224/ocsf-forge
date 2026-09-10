@@ -17,6 +17,7 @@ from ulpf.models import NormalizedEvent
 from ulpf.normalizer import OCSFNormalizer
 from ulpf.parsers import LogParserEngine
 from ulpf.parsing.json_document import decode_json
+from ulpf.parsing.limits import InputLimitError, check_event_limit
 from ulpf.parsing.structured import MAPPED_FIELDS
 
 if TYPE_CHECKING:
@@ -25,7 +26,7 @@ if TYPE_CHECKING:
 CSV_FIELDS = MAPPED_FIELDS | {"status", "outcome"}
 
 
-def _logical_events(lines: list[str] | tuple[str, ...], is_log4j) -> list[tuple[int, str]]:
+def _logical_events(lines: list[str] | tuple[str, ...], is_log4j, max_events: int | None = None) -> list[tuple[int, str]]:
     events: list[tuple[int, str]] = []
     chunks: list[str] = []
     offset = 0
@@ -40,6 +41,7 @@ def _logical_events(lines: list[str] | tuple[str, ...], is_log4j) -> list[tuple[
         elif line.strip():
             if chunks:
                 events.append((offset, "\n".join(chunks)))
+            check_event_limit(len(events) + 1, max_events)
             offset, chunks = index, [line]
             accepts_continuations = is_log4j(line)
     if chunks:
@@ -56,6 +58,7 @@ def run_pipeline(
     ingestion_run_id: str = "",
     observed_at: datetime | None = None,
     forced_format: str | None = None,
+    max_events: int | None = None,
 ) -> list[NormalizedEvent]:
     return EventProcessor().run(
         lines,
@@ -65,6 +68,7 @@ def run_pipeline(
         ingestion_run_id=ingestion_run_id,
         observed_at=observed_at,
         forced_format=forced_format,
+        max_events=max_events,
     )
 
 
@@ -88,14 +92,16 @@ class EventProcessor:
         ingestion_run_id: str = "",
         observed_at: datetime | None = None,
         forced_format: str | None = None,
+        max_events: int | None = None,
     ) -> list[NormalizedEvent]:
+        check_event_limit(0, max_events)
         if isinstance(lines, str):
             lines = lines.splitlines()
         observed = observed_at or datetime.now(UTC)
         if observed.tzinfo is None:
             observed = observed.replace(tzinfo=UTC)
         events: list[NormalizedEvent] = []
-        for offset, line in _logical_events(lines, lambda value: self.log4j_parser.detect(value) > 0):
+        for offset, line in _logical_events(lines, lambda value: self.log4j_parser.detect(value) > 0, max_events):
             if forced_format:
                 fmt, parser_name, parser_version, confidence, parsed = self.parser.registry.parse(
                     line, observed, forced_format
@@ -124,7 +130,10 @@ class EventProcessor:
         return events
 
 
-def run_payload(payload: bytes, filename: str = "upload.log", source_id: str | None = None) -> list[NormalizedEvent]:
+def run_payload(
+    payload: bytes, filename: str = "upload.log", source_id: str | None = None, *, max_events: int | None = None,
+) -> list[NormalizedEvent]:
+    check_event_limit(0, max_events)
     identity = source_id or hashlib.sha256(payload).hexdigest()
     try:
         text = payload.decode("utf-8-sig")
@@ -145,8 +154,9 @@ def run_payload(payload: bytes, filename: str = "upload.log", source_id: str | N
                                            source_id=identity, source_name=filename)]
     if isinstance(decoded, dict | list):
         records = decoded if isinstance(decoded, list) else [decoded]
+        check_event_limit(len(records), max_events)
         lines = [json.dumps(item, separators=(",", ":"), ensure_ascii=False) for item in records]
-        return run_pipeline(lines, source_id=identity, source_name=filename, forced_format="json")
+        return run_pipeline(lines, source_id=identity, source_name=filename, forced_format="json", max_events=max_events)
     if lowered.endswith(".xml") or re.match(r"<(?:[A-Za-z_:]|\?)", text.lstrip()):
         try:
             root = ET.fromstring(text)
@@ -154,8 +164,9 @@ def run_payload(payload: bytes, filename: str = "upload.log", source_id: str | N
             return run_pipeline([text], source_id=identity, source_name=filename, forced_format="xml")
         root_name = root.tag.rsplit("}", 1)[-1].lower()
         nodes = list(root) if root_name in {"events", "logs", "records"} and list(root) else [root]
+        check_event_limit(len(nodes), max_events)
         lines = [ET.tostring(node, encoding="unicode") for node in nodes]
-        return run_pipeline(lines, source_id=identity, source_name=filename, forced_format="xml")
+        return run_pipeline(lines, source_id=identity, source_name=filename, forced_format="xml", max_events=max_events)
     if lowered.endswith(".csv") or _looks_like_csv(text):
         try:
             dialect = csv.Sniffer().sniff(text[:8192], delimiters=",;\t")
@@ -174,12 +185,15 @@ def run_payload(payload: bytes, filename: str = "upload.log", source_id: str | N
                     continue
                 if len(row) != len(keys):
                     raise ValueError(f"CSV row ending at line {reader.line_num} has {len(row)} fields; expected {len(keys)}")
+                check_event_limit(len(lines) + 1, max_events)
                 lines.append(json.dumps(dict(zip(keys, row, strict=True)), separators=(",", ":"), ensure_ascii=False))
+        except InputLimitError:
+            raise
         except (csv.Error, ValueError) as exc:
             return [OCSFNormalizer().normalize(text, "csv", {"_parsed": False, "parse_notes": str(exc)},
                                                source_id=identity, source_name=filename)]
-        return run_pipeline(lines, source_id=identity, source_name=filename, forced_format="csv")
-    return run_pipeline(text.splitlines(), source_id=identity, source_name=filename)
+        return run_pipeline(lines, source_id=identity, source_name=filename, forced_format="csv", max_events=max_events)
+    return run_pipeline(text.splitlines(), source_id=identity, source_name=filename, max_events=max_events)
 
 
 def _looks_like_csv(text: str) -> bool:

@@ -27,4 +27,4 @@ jobs:
       - name: Homelab backend and UI
         env:
           HOMELAB_ISOLATED: ${{ matrix.environment == 'isolated' && '1' || '0' }}
-        run: pytest -q tests/test_duckdb_backend.py tests/test_homelab_app.py
+        run: pytest -q tests/test_duckdb_backend.py tests/test_duckdb_recovery.py tests/test_homelab_app.py tests/test_input_limits.py tests/test_parser_resource_safety.py

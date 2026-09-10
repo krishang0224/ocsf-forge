@@ -33,6 +33,18 @@ def test_oversized_input_produces_no_partial_output():
     assert not result.stdout
 
 
+def test_event_limit_produces_no_partial_output():
+    result = run("normalize", "-", "--max-events", "1", payload=b'{}\n{}\n')
+    assert result.returncode == 2 and not result.stdout
+    assert b"1-event limit" in result.stderr
+
+
+def test_event_limit_must_be_positive():
+    result = run("normalize", "-", "--max-events", "0", payload=b'')
+    assert result.returncode == 2 and not result.stdout
+    assert b"must be positive" in result.stderr
+
+
 def test_missing_file_has_actionable_error_without_traceback():
     result = run("normalize", "/nonexistent/ocsf-test-input.log")
     assert result.returncode == 2

@@ -4,6 +4,13 @@ Changes to parser output, event identity, and storage layout are recorded here. 
 
 ## Unreleased
 
+- Add explicit DuckDB homelab mode with isolated dependencies, atomic local ingestion, and a read-only SQL workspace; the Trino deployment remains the default.
+- Bind local ingestion by column to reduce SQL planning overhead. Add repeatable stress harnesses, real engine-memory and process-crash recovery tests, and a [dated audit](docs/stress-testing.md) including capacity failures.
+- Reject unpaired Unicode JSON escapes into quarantine, including safe diagnostics for malformed keys. JSON parser version is now `2.2.1`.
+- Avoid quadratic scanning and ambiguous escape backtracking in Syslog fields; preserve a quoted value's escaped final quote. Syslog parser version is now `2.1.1`. Existing persisted rows are not rewritten.
+- Bound UI and offline CLI inputs to 50,000 events before normalization, in addition to the existing byte limits. Add `ULPF_MAX_UPLOAD_EVENTS` and CLI `--max-events`; direct pipeline callers remain uncapped unless they supply `max_events`.
+- Keep SQL results visible when downloading and use the correct backend name in the CSV filename.
+
 - Refresh README dashboard, SQL, ingestion, and findings screenshots for the Terminal theme. Add an Appearance preview and clarify the capture date and historical synthetic-data context.
 
 - Replace the decorative default theme with compact Terminal styling. Add three alternative presets and a collapsed Custom appearance panel with validated, shareable URL settings. See [appearance controls and limitations](docs/appearance.md).

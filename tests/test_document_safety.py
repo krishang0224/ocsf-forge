@@ -46,6 +46,30 @@ def test_invalid_utf8_retains_original_bytes():
     assert base64.b64decode(event.metadata["raw_bytes_base64"]) == payload
 
 
+@pytest.mark.parametrize("payload", [
+    b'{"message":"\\ud800"}', b'{"\\udfff":"value"}',
+    b'{"extra":[{"nested":"\\udc00"}]}', b'[{"message":"\\ud800"}]',
+])
+def test_unpaired_unicode_escapes_are_quarantined_without_losing_raw_input(payload):
+    events = run_payload(payload)
+    assert len(events) == 1 and not events[0].parse_success
+    assert events[0].original_raw_payload.encode() == payload
+    assert "surrogate" in events[0].parse_notes
+
+
+def test_valid_unicode_surrogate_pair_is_preserved():
+    event = run_payload(b'{"message":"\\ud834\\udd1e"}')[0]
+    assert event.parse_success and event.message == "\U0001d11e"
+
+
+def test_duplicate_surrogate_keys_have_a_utf8_safe_error_message():
+    payload = b'{"\\ud800":1,"\\ud800":2}'
+    for event in (run_payload(payload)[0], run_pipeline([payload.decode()])[0]):
+        assert not event.parse_success
+        assert "Duplicate JSON key" in event.parse_notes
+        event.parse_notes.encode("utf-8")
+
+
 @pytest.mark.parametrize("port", [True, False, 1.5, -1, 65536])
 def test_noninteger_or_out_of_range_ports_fail(port):
     assert OCSFNormalizer._port(port, "source")[1]

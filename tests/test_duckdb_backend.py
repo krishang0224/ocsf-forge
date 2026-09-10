@@ -69,6 +69,14 @@ def test_timestamp_and_ocsf_exact_round_trip(backend):
     assert row["message"] == event.message
 
 
+@pytest.mark.parametrize("invalid", ['{"message":"\\ud800"}', '{"\\ud800":1,"\\ud800":2}'])
+def test_unpaired_unicode_does_not_abort_valid_neighbors(backend, invalid):
+    events = run_pipeline(['{"message":"valid"}', invalid])
+    result = backend.ingest_events(events)
+    assert (result.committed, result.quarantined) == (1, 1)
+    assert backend.query("SELECT raw_payload FROM quarantine_events")[0].iloc[0]["raw_payload"] == invalid
+
+
 def test_batch_failure_rolls_back_all_event_tables_and_records_failure(backend, monkeypatch):
     original = backend._insert_records
 
@@ -174,6 +182,24 @@ def test_2500_events_and_replay_fit_default_memory_limit(backend):
     ], source_id="bounded-batch")
     assert backend.ingest_events(events).committed == 2500
     assert backend.ingest_events(events).duplicates == 2500
+
+
+def test_insert_binding_count_depends_on_columns_not_rows(backend):
+    class Connection:
+        calls = []
+
+        def execute(self, statement, params):
+            self.calls.append((statement, params))
+
+    connection = Connection()
+    backend._insert_records(connection, "raw_events", iter([
+        {"event_id": "a", "source_offset": 0}, {"event_id": "b", "source_offset": None},
+        {"event_id": "c", "source_offset": 2},
+    ]))
+    assert len(connection.calls) == 2
+    assert connection.calls[0][0].count("?") == 2
+    assert connection.calls[0][1] == [["a", "b"], [0, None]]
+    assert connection.calls[1][1] == [["c"], [2]]
 
 
 @pytest.mark.parametrize("changes", [

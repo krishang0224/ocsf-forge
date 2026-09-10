@@ -5,6 +5,7 @@ import json
 import streamlit as st
 
 from ulpf.config import settings
+from ulpf.parsing.limits import InputLimitError
 from ulpf.pipeline import events_to_frame, run_payload, run_pipeline
 from ulpf.sample_data import SAMPLE_LOGS
 
@@ -15,8 +16,16 @@ def _cached_lines(lines: tuple[str, ...], source_id: str, source_name: str) -> l
 
 
 @st.cache_data(ttl=300, show_spinner=False, max_entries=6)
-def _cached_payload(payload: bytes, filename: str) -> list:
-    return run_payload(payload, filename)
+def _cached_payload(payload: bytes, filename: str, max_events: int) -> list:
+    return run_payload(payload, filename, max_events=max_events)
+
+
+def _interactive_payload(payload: bytes, filename: str) -> list:
+    try:
+        return _cached_payload(payload, filename, settings.max_upload_events)
+    except InputLimitError as exc:
+        st.error(str(exc))
+        return []
 
 
 def render_ingestion_controls(*, local: bool = False) -> tuple[list, bool]:
@@ -36,7 +45,7 @@ def render_ingestion_controls(*, local: bool = False) -> tuple[list, bool]:
                     + ("Split larger files before uploading." if local else "Use Kafka for larger feeds.")
                 )
             else:
-                events = _cached_payload(payload, upload.name)
+                events = _interactive_payload(payload, upload.name)
     else:
         raw = st.text_area(
             "Paste JSON, CSV, XML, or one event per line",
@@ -47,7 +56,7 @@ def render_ingestion_controls(*, local: bool = False) -> tuple[list, bool]:
         if len(payload) > settings.max_upload_bytes:
             st.error(f"Pasted input exceeds the {settings.max_upload_bytes / 1_048_576:.0f} MB interactive limit.")
         else:
-            events = _cached_payload(payload, "Pasted events") if raw.strip() else []
+            events = _interactive_payload(payload, "Pasted events") if raw.strip() else []
 
     parsed = sum(event.parse_success for event in events)
     if events:

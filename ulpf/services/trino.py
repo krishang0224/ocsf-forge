@@ -16,6 +16,7 @@ from trino.dbapi import connect
 
 from ulpf.config import Settings, settings
 from ulpf.models import IngestionResult, NormalizedEvent
+from ulpf.services.backend import QueryBackend, UnsafeQueryError
 from ulpf.services.sql_guard import scrub_sql
 from ulpf.sql import LAKEHOUSE_SETUP
 
@@ -30,11 +31,7 @@ LOGGER = logging.getLogger(__name__)
 MergeItem = TypeVar("MergeItem")
 
 
-class UnsafeQueryError(ValueError):
-    pass
-
-
-class TrinoService:
+class TrinoService(QueryBackend):
     def __init__(self, config: Settings = settings):
         self.config = config
 

@@ -4,8 +4,7 @@ import math
 import os
 import re
 from dataclasses import dataclass
-
-from trino.auth import BasicAuthentication
+from typing import Literal
 
 
 def _flag(name: str, default: bool = False) -> bool:
@@ -35,8 +34,26 @@ class Settings:
     trino_max_query_bytes: int = int(os.getenv("ULPF_TRINO_MAX_QUERY_BYTES", "850000"))
     iceberg_commit_retries: int = int(os.getenv("ULPF_ICEBERG_COMMIT_RETRIES", "6"))
     max_upload_bytes: int = int(os.getenv("ULPF_MAX_UPLOAD_BYTES", str(25 * 1024 * 1024)))
+    backend: Literal["trino", "duckdb"] = os.getenv("ULPF_BACKEND", "trino")
+    homelab_directory: str = os.getenv(
+        "ULPF_HOMELAB_DIRECTORY", os.path.expanduser("~/.local/share/ocsf-forge")
+    )
+    duckdb_memory_limit: str = os.getenv("ULPF_DUCKDB_MEMORY_LIMIT", "256MB")
+    duckdb_threads: int = int(os.getenv("ULPF_DUCKDB_THREADS", "2"))
+    duckdb_query_timeout: float = float(os.getenv("ULPF_DUCKDB_QUERY_TIMEOUT", "10"))
 
     def __post_init__(self):
+        if self.backend not in {"trino", "duckdb"}:
+            raise ValueError("ULPF_BACKEND must be trino or duckdb; no automatic fallback is available")
+        if self.backend == "duckdb":
+            if not self.homelab_directory.strip():
+                raise ValueError("homelab_directory must not be empty")
+            if not re.fullmatch(r"[1-9][0-9]*(MB|GB)", self.duckdb_memory_limit):
+                raise ValueError("duckdb_memory_limit must be a positive whole number followed by MB or GB")
+            if self.duckdb_threads <= 0:
+                raise ValueError("duckdb_threads must be positive")
+            if not math.isfinite(self.duckdb_query_timeout) or self.duckdb_query_timeout <= 0:
+                raise ValueError("duckdb_query_timeout must be finite and positive")
         for name in ("query_row_limit", "insert_batch_size", "trino_max_query_bytes", "max_upload_bytes"):
             if getattr(self, name) <= 0:
                 raise ValueError(f"{name} must be positive")
@@ -58,6 +75,10 @@ class Settings:
 
     @property
     def trino_auth(self):
+        if not self.trino_password:
+            return None
+        from trino.auth import BasicAuthentication
+
         return BasicAuthentication(self.trino_user, self.trino_password) if self.trino_password else None
 
 

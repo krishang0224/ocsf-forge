@@ -19,7 +19,7 @@ def _cached_payload(payload: bytes, filename: str) -> list:
     return run_payload(payload, filename)
 
 
-def render_ingestion_controls() -> tuple[list, bool]:
+def render_ingestion_controls(*, local: bool = False) -> tuple[list, bool]:
     st.markdown("### Add data")
     mode = st.segmented_control("Source", ["Sample", "Upload", "Paste"], default="Sample", label_visibility="collapsed")
     events: list = []
@@ -33,7 +33,7 @@ def render_ingestion_controls() -> tuple[list, bool]:
             if len(payload) > settings.max_upload_bytes:
                 st.error(
                     f"Upload exceeds the {settings.max_upload_bytes / 1_048_576:.0f} MB interactive limit. "
-                    "Use Kafka for larger feeds."
+                    + ("Split larger files before uploading." if local else "Use Kafka for larger feeds.")
                 )
             else:
                 events = _cached_payload(payload, upload.name)
@@ -52,7 +52,7 @@ def render_ingestion_controls() -> tuple[list, bool]:
     parsed = sum(event.parse_success for event in events)
     if events:
         st.caption(f"{len(events):,} events · {parsed:,} ready · {len(events) - parsed:,} quarantine")
-    ingest = st.button("Ingest into Iceberg", type="primary", width="stretch", disabled=not events)
+    ingest = st.button("Ingest into DuckDB" if local else "Ingest into Iceberg", type="primary", width="stretch", disabled=not events)
     return events, ingest
 
 

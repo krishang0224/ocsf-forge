@@ -4,7 +4,7 @@ import pandas as pd
 import plotly.express as px
 import streamlit as st
 
-from ulpf.services.trino import TrinoService
+from ulpf.services.backend import QueryBackend
 from ulpf.sql import (
     OVERVIEW_QUERY,
     QUALITY_QUERY,
@@ -17,7 +17,7 @@ from ulpf.sql import (
 
 
 @st.cache_data(ttl=10, show_spinner=False)
-def _load_dashboard(_trino: TrinoService) -> dict[str, pd.DataFrame]:
+def _load_dashboard(_trino: QueryBackend) -> dict[str, pd.DataFrame]:
     return _trino.query_many(
         {
             "overview": OVERVIEW_QUERY,
@@ -39,7 +39,8 @@ def safe_parse_rate(value) -> float:
     return 0.0 if value is None or pd.isna(value) else float(value)
 
 
-def render_dashboard(trino: TrinoService) -> None:
+def render_dashboard(trino: QueryBackend) -> None:
+    local = trino.config.backend == "duckdb"
     try:
         data = _load_dashboard(trino)
         overview = data["overview"]
@@ -50,7 +51,8 @@ def render_dashboard(trino: TrinoService) -> None:
         runs = data["runs"]
         warehouse = data["warehouse"]
     except Exception as exc:
-        st.info("The lakehouse is starting. Once Trino and the catalog are ready, current Iceberg data appears here.")
+        st.info("Local data could not be loaded. Check the database path and file permissions." if local else
+                "The lakehouse is starting. Once Trino and the catalog are ready, current Iceberg data appears here.")
         with st.expander("Connection detail"):
             st.code(str(exc))
         return
@@ -63,7 +65,7 @@ def render_dashboard(trino: TrinoService) -> None:
     parse_rate = safe_parse_rate(row.get("parse_rate"))
     metrics[3].metric("Parse rate", f"{parse_rate:.1f}%")
 
-    events_tab, ingestion_tab, warehouse_tab = st.tabs(["Events", "Ingestion quality", "Warehouse"])
+    events_tab, ingestion_tab, warehouse_tab = st.tabs(["Events", "Ingestion quality", "Local storage" if local else "Warehouse"])
     with events_tab:
         left, right = st.columns([1, 1.65])
         with left:
@@ -117,6 +119,12 @@ def render_dashboard(trino: TrinoService) -> None:
         st.dataframe(runs, width="stretch", height=320, hide_index=True)
     with warehouse_tab:
         state = warehouse.iloc[0] if not warehouse.empty else {}
+        if local:
+            cards = st.columns(2)
+            cards[0].metric("Database", f"{float(state.get('database_bytes', 0)) / 1048576:.2f} MB")
+            cards[1].metric("Write-ahead log", f"{float(state.get('wal_bytes', 0)) / 1048576:.2f} MB")
+            st.caption("DuckDB native storage. No Iceberg data files, snapshots, or lakehouse maintenance apply.")
+            return
         cards = st.columns(3)
         cards[0].metric("Data files", f"{int(state.get('data_files', 0)):,}")
         cards[1].metric("Average file", f"{float(state.get('average_file_mb', 0.0)):.2f} MB")

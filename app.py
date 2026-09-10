@@ -5,6 +5,13 @@ from dataclasses import replace
 import streamlit as st
 
 from ulpf.config import settings
+
+if settings.backend == "duckdb":
+    from ulpf.ui.homelab import render_homelab
+
+    render_homelab()
+    st.stop()
+
 from ulpf.services.minio import MinioService
 from ulpf.services.trino import TrinoService
 from ulpf.ui.dashboard import clear_dashboard_cache, render_dashboard

@@ -124,23 +124,25 @@ Adding a parser does not require changing the pipeline or UI. See [parser develo
 
 ## Measured, not guessed
 
-These numbers came from the local Compose stack on a 16 GB development machine. They are a regression baseline, not a throughput promise for other hardware.
+Latest stress audit: **September 10, 2026**, on an Intel Core i5-12450H with 16 GB RAM. These are single-run development observations, not production capacity promises or Raspberry Pi benchmarks. Trino used a temporary 2 GB heap and two-CPU limit for this audit; the normal deployment defaults were not changed.
 
 | Check | Result |
 | --- | ---: |
-| Mixed-format parser run | 50,000 records at ~11,900 records/sec |
-| Durable 2,500-row ingest | 14.2 seconds (~177 records/sec) |
-| Four concurrent writers | 2,000/2,000 rows committed, 2,000 unique IDs |
-| Kafka end-to-end | 5,000/5,000 raw records received |
-| Invalid Kafka records | 250/250 quarantined and sent to the dead-letter topic |
-| Replay test | 2,500 duplicates detected, zero duplicate rows added |
-| Automated checks | [Latest CI result and test output](https://github.com/krishang0224/ocsf-forge/actions/workflows/ci.yml) |
+| Homelab sustained ingestion | 250,000 events in 10,000-event commits; 84.27 seconds including parsing |
+| Homelab 50,000-event transaction | 7.64 seconds to insert; 6.70 seconds to replay |
+| Eight homelab sessions, same input | 1,000 unique events; 7,000 duplicates detected |
+| Trino 10,000-event ingestion and replay | 84.66 seconds combined |
+| Three concurrent Trino writers | 1,000 unique events; real commit conflicts retried |
+| Kafka outage recovery | 1,500 raw events accounted for; offsets held during the outage |
+| Invalid Kafka records | 150 quarantined; 150 unique dead letters |
+| Failure recovery | DuckDB memory exhaustion/process termination and Trino partial-write replay passed |
+| Automated checks | [Full-stack CI](https://github.com/krishang0224/ocsf-forge/actions/workflows/ci.yml) · [Homelab CI](https://github.com/krishang0224/ocsf-forge/actions/workflows/homelab.yml) |
 
-The first load test exposed real Iceberg conflicts and Trino's 1 MB query-text ceiling. The current writer retries idempotent commits and splits batches by both row count and encoded parameter size.
+**Known limit:** a single 100,000-event homelab transaction exhausted both the 256 MB and 512 MB DuckDB engine budgets. It rolled back without partial event rows, and subsequent reads and writes worked. Smaller complete batches succeeded; total database size and single-transaction size are different limits. The engine memory setting does not cap total Python/Streamlit memory.
 
-CI runs lint, tests, and Compose configuration validation on pushes and pull requests. It does not reproduce the live throughput benchmarks above.
+The audit fixed malformed Unicode aborting batches, slow Syslog field scanning, escaped-quote loss, and byte-only input limits. Binding DuckDB inserts by column reduced a separate 10,000-event insert comparison from 4.31 to 1.27 seconds. Trino retains size-aware batching and idempotent conflict retries.
 
-For the newer homelab implementation, see the [September 10 stress audit](docs/stress-testing.md): workloads, reproducible commands, fault recovery, and the single-transaction memory limit. The earlier table above is a separate development baseline, not a comparison against the resource-limited audit stack.
+See the [full stress report and reproduction commands](docs/stress-testing.md) for methodology and untested scenarios. CI runs deterministic regressions, lint, and Compose validation; it does not reproduce these live load timings. Test counts remain in CI output rather than a fixed README claim.
 
 ## Stream from Kafka
 

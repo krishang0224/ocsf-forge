@@ -1,0 +1,33 @@
+{
+  "ocsf_version": "1.8.0",
+  "schema_tag_commit": "6fa6499a0f8c9f449d342816e90e5f687c224b0a",
+  "retrieved_utc": "2026-09-16",
+  "source": "OCSF official resolved class API, no optional profiles",
+  "scope": "Partial top-level contract snapshots, not JSON Schema documents",
+  "contracts": {
+    "detection_finding": {
+      "url": "https://schema.ocsf.io/1.8.0/api/classes/detection_finding?profiles=",
+      "sha256": "fde5595bd21d0ffe292ebba37b167de28dc465a95735069e52d39b4e3ac40ebd"
+    },
+    "authentication": {
+      "url": "https://schema.ocsf.io/1.8.0/api/classes/authentication?profiles=",
+      "sha256": "0e6d0455b70f7590a465aea6f38337d88688f96d01fdc7735c735777002334fb"
+    },
+    "network_activity": {
+      "url": "https://schema.ocsf.io/1.8.0/api/classes/network_activity?profiles=",
+      "sha256": "473f39e332d5892ad5b6f41c5de60237c04f6632bdb39b2bddd2e863518a1130"
+    },
+    "http_activity": {
+      "url": "https://schema.ocsf.io/1.8.0/api/classes/http_activity?profiles=",
+      "sha256": "faa7225ec3182393a9bb738c28609a11cef6cfce3c3541014b790f46170e8a7c"
+    },
+    "application_error": {
+      "url": "https://schema.ocsf.io/1.8.0/api/classes/application_error?profiles=",
+      "sha256": "5e962b3fb98243ae2f43732572dd4acf17e429e146d27553e9b3322cd9981350"
+    },
+    "api_activity": {
+      "url": "https://schema.ocsf.io/1.8.0/api/classes/api_activity?profiles=",
+      "sha256": "b001fa0431f8a492858315b3bcaca81bf528849b889980f75f751c3b3f5d2fa7"
+    }
+  }
+}

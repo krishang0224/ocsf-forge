@@ -4,6 +4,9 @@ Changes to parser output, event identity, and storage layout are recorded here. 
 
 ## Unreleased
 
+- Publish version-pinned OCSF fixtures and an opt-in official validator check. Document five failing synthetic exports without changing mappings or claiming conformance; CI checks the known-gap regression baseline.
+- Add a worked Syslog example, documentation index, configuration entry points and evidence-hash verification limits.
+
 - Add explicit DuckDB homelab mode with isolated dependencies, atomic local ingestion, and a read-only SQL workspace; the Trino deployment remains the default.
 - Bind local ingestion by column to reduce SQL planning overhead. Add repeatable stress harnesses, real engine-memory and process-crash recovery tests, and a [dated audit](docs/stress-testing.md) including capacity failures.
 - Reject unpaired Unicode JSON escapes into quarantine, including safe diagnostics for malformed keys. JSON parser version is now `2.2.1`.

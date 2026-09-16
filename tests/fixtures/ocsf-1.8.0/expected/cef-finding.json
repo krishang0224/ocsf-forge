@@ -1,0 +1,44 @@
+{
+  "activity_id": 1,
+  "activity_name": "Create",
+  "category_uid": 2,
+  "category_name": "Findings",
+  "class_uid": 2004,
+  "class_name": "Detection Finding",
+  "type_uid": 200401,
+  "type_name": "Detection Finding: Create",
+  "severity_id": 4,
+  "severity": "High",
+  "status_id": 1,
+  "status": "New",
+  "time": 1788220800000,
+  "timezone_offset": 0,
+  "message": "Blocked by policy",
+  "metadata": {
+    "uid": "436b63ed6836f469672aa98057aa113735ada0389007f420490160a11479c059",
+    "version": "1.8.0",
+    "logged_time": 1788220860000,
+    "product": {
+      "name": "Sensor",
+      "vendor_name": "Example",
+      "version": "2.0.0"
+    }
+  },
+  "unmapped": {
+    "rt": "2026-09-01T00:00:00Z",
+    "src": "192.0.2.10",
+    "msg": "Blocked by policy",
+    "cef_version": "0",
+    "device_version": "1",
+    "signature_id": "42",
+    "detection_confidence": 1
+  },
+  "src_endpoint": {
+    "ip": "192.0.2.10"
+  },
+  "finding_info": {
+    "title": "Blocked by policy",
+    "uid": "42"
+  },
+  "is_alert": true
+}

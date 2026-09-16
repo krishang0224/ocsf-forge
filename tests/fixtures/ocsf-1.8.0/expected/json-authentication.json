@@ -1,0 +1,38 @@
+{
+  "activity_id": 1,
+  "activity_name": "Logon",
+  "category_uid": 3,
+  "category_name": "Identity & Access Management",
+  "class_uid": 3002,
+  "class_name": "Authentication",
+  "type_uid": 300201,
+  "type_name": "Authentication: Logon",
+  "severity_id": 1,
+  "severity": "Informational",
+  "status_id": 2,
+  "status": "Failure",
+  "time": 1788220800000,
+  "timezone_offset": 0,
+  "message": "Login failed",
+  "metadata": {
+    "uid": "00bf12264fe2175f2dea04b2c2862ae6a77a777347c00ebccf2109547bf55daf",
+    "version": "1.8.0",
+    "logged_time": 1788220860000,
+    "product": {
+      "name": "ssh",
+      "vendor_name": "Application",
+      "version": "2.2.1"
+    }
+  },
+  "unmapped": {
+    "detection_confidence": 0.95
+  },
+  "src_endpoint": {
+    "ip": "192.0.2.10"
+  },
+  "actor": {
+    "user": {
+      "name": "alice"
+    }
+  }
+}

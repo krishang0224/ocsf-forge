@@ -4,7 +4,7 @@
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache--2.0-blue.svg)](LICENSE)
 [![Python 3.11](https://img.shields.io/badge/Python-3.11-blue.svg)](CONTRIBUTING.md)
 
-**Mixed logs in. Queryable OCSF out.**
+**Mixed logs in. Queryable, OCSF-aligned events out.**
 
 OCSF Forge turns JSON, CSV, XML, CEF, LEEF, Syslog, Apache, and Log4j records into one security-event model. It keeps the original evidence, sends bad records to quarantine, and writes the clean stream to Apache Iceberg for SQL analysis through Trino.
 
@@ -12,11 +12,13 @@ An optional detection worker identifies repeated authentication failures, possib
 
 The project exists for a familiar reason: collecting logs is easy; making eight incompatible formats useful in the same query is not.
 
+**Export compatibility:** the [OCSF 1.8.0 fixture audit](docs/ocsf-validation.md) found structural failures in five of eight synthetic examples. The current exporter is not fully schema-conformant; check those limits before depending on its JSON output.
+
 ![Terminal-theme dashboard showing stored event totals, severity distribution, services, and recent events](docs/images/dashboard.png)
 
 Screenshots captured from the running app on September 9, 2026, using retained bundled samples and the synthetic authentication demo. Counts and quarantine rates reflect that historical demo data, not a fresh run or a throughput benchmark. [Why OCSF?](docs/why-ocsf.md)
 
-[Evaluation guide and verification checkpoint](docs/evaluation.md) · [Contribute a parser](docs/parser-development.md)
+[Documentation index](docs/README.md) · [Evaluation guide](docs/evaluation.md) · [Contribute a parser](docs/parser-development.md) · [Report a vulnerability](.github/SECURITY.md)
 
 <details>
 <summary>SQL workspace and ingestion results</summary>
@@ -40,7 +42,7 @@ versioned parser registry
         |
         +-- raw_events          original evidence
         +-- quarantine_events   rejected data + reason
-        +-- application_logs    normalized OCSF 1.8 events
+        +-- application_logs    normalized OCSF-aligned events
                     +-- authentication rules --> detections
                     |
                     v
@@ -51,6 +53,52 @@ Parquet storage  -> MinIO
 ```
 
 Every record gets a deterministic ID from its source, offset, and payload hash. Replaying a file or Kafka range fills incomplete writes without duplicating rows.
+
+Raw records already carry a SHA-256 payload digest. See [how to verify it and what it does not prove](docs/evidence-integrity.md): it detects a payload/digest mismatch, not an attacker replacing both.
+
+### One record, before and after
+
+Input (Syslog):
+
+```text
+<134>1 2026-09-01T00:00:00Z firewall app - - - action=deny src=192.0.2.10 dst=198.51.100.20 dport=443
+```
+
+Output excerpt (not a standalone complete event):
+
+```json
+{
+  "class_uid": 4001,
+  "class_name": "Network Activity",
+  "activity_id": 5,
+  "activity_name": "Refuse",
+  "type_uid": 400105,
+  "time": 1788220800000,
+  "src_endpoint": {"ip": "192.0.2.10"},
+  "dst_endpoint": {"ip": "198.51.100.20", "port": 443}
+}
+```
+
+Try `python -m ulpf normalize examples/firewall.log` without running services. The [complete fixed fixture](tests/fixtures/ocsf-1.8.0/expected/syslog-network.json) passed the official OCSF 1.8.0 validator; this does not establish conformance for other inputs. [Reproduce all eight checks](docs/ocsf-validation.md).
+
+### Query across formats
+
+This query uses normalized authentication fields rather than a different vendor field name for each source:
+
+```sql
+SELECT service_name, ip_address, user_id, count(*) AS failures
+FROM iceberg.logging.application_logs
+WHERE class_uid = 3002 AND activity_id = 1 AND status_id = 2
+GROUP BY service_name, ip_address, user_id
+ORDER BY failures DESC
+LIMIT 20;
+```
+
+Both SQL workspaces offer a **Download results** CSV button. The CLI emits OCSF JSONL; it does not persist raw records or quarantine.
+
+### When this is a fit
+
+Choose this project when you want to inspect the mapping, retain rejected records, query standard Iceberg tables and run the included authentication rules in one small stack. Use the offline CLI or DuckDB mode to evaluate the parsers first. This is not a replacement for a mature fleet-wide log collector, a vendor mapping-content library or a multi-tenant SIEM. There is no need to choose a bespoke storage format to try the full deployment, but generic format support still does not imply correct semantics for every vendor.
 
 ## Run locally
 

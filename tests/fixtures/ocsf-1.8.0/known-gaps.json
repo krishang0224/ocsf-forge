@@ -1,0 +1,54 @@
+[
+  {
+    "fixture": "cef-finding",
+    "class_uid": 2004,
+    "errors": [
+      "attribute not in selected base class: src_endpoint"
+    ]
+  },
+  {
+    "fixture": "leef-finding",
+    "class_uid": 2004,
+    "errors": [
+      "attribute not in selected base class: src_endpoint"
+    ]
+  },
+  {
+    "fixture": "json-authentication",
+    "class_uid": 3002,
+    "errors": [
+      "at_least_one required: service, dst_endpoint",
+      "missing required attribute: user"
+    ]
+  },
+  {
+    "fixture": "syslog-network",
+    "class_uid": 4001,
+    "errors": []
+  },
+  {
+    "fixture": "apache-http",
+    "class_uid": 4002,
+    "errors": [
+      "at_least_one required: http_request, http_response",
+      "attribute not in selected base class: actor"
+    ]
+  },
+  {
+    "fixture": "log4j-error",
+    "class_uid": 6008,
+    "errors": []
+  },
+  {
+    "fixture": "csv-api",
+    "class_uid": 6003,
+    "errors": [
+      "missing required attribute: src_endpoint"
+    ]
+  },
+  {
+    "fixture": "xml-api",
+    "class_uid": 6003,
+    "errors": []
+  }
+]

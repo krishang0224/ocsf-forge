@@ -27,5 +27,7 @@ jobs:
         run: ruff check .
       - name: Tests
         run: pytest -q
+      - name: OCSF fixture regression (known gaps, not certification)
+        run: python -m validation.check_ocsf --check-baseline
       - name: Validate all Compose profiles
         run: docker compose --profile streaming --profile operations --profile detection config --quiet

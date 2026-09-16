@@ -1,0 +1,1 @@
+<134>1 2026-09-01T00:00:00Z firewall app - - - action=deny src=192.0.2.10 dst=198.51.100.20 dport=443

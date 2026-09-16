@@ -12,6 +12,8 @@ Original payloads remain in `raw_events`. Unmapped vendor fields are retained as
 
 ## Limits and tradeoffs
 
+The [version-pinned fixture audit](ocsf-validation.md) found structural export failures in five of eight synthetic examples using the official OCSF validator. See that report for exact failures and reproduction commands; the current exporter must not be treated as fully conformant.
+
 OCSF does not tell a generic parser what every vendor field means. A JSON object with an ambiguous action still needs a source-specific mapping before its security meaning can be trusted. The bundled parsers cover a subset of OCSF classes; these checks are not complete validation against every OCSF schema constraint or a certification of compliance.
 
 Adding a class requires an explicit category mapping and tests. Changing a mapping can affect saved queries and reprocessing, so parser versions and schema changes need to be recorded in the changelog. See [parser development](parser-development.md) and [operations](operations.md).

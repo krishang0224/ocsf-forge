@@ -1,0 +1,33 @@
+{
+  "activity_id": 1,
+  "activity_name": "General Error",
+  "category_uid": 6,
+  "category_name": "Application Activity",
+  "class_uid": 6008,
+  "class_name": "Application Error",
+  "type_uid": 600801,
+  "type_name": "Application Error: General Error",
+  "severity_id": 4,
+  "severity": "High",
+  "status_id": 2,
+  "status": "Failure",
+  "time": 1788220800000,
+  "timezone_offset": 0,
+  "message": "Request failed",
+  "metadata": {
+    "uid": "4ea9a24b14ae3cbaddd533af28ad4e7e19449ec63c9db394a12df9e470ed80c5",
+    "version": "1.8.0",
+    "logged_time": 1788220860000,
+    "product": {
+      "name": "Service",
+      "vendor_name": "Unknown",
+      "version": "1.1.0"
+    }
+  },
+  "unmapped": {
+    "thread": "main",
+    "logger": "example.Service",
+    "level": "ERROR",
+    "detection_confidence": 0.9
+  }
+}

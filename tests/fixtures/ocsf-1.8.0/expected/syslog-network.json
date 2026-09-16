@@ -1,0 +1,47 @@
+{
+  "activity_id": 5,
+  "activity_name": "Refuse",
+  "category_uid": 4,
+  "category_name": "Network Activity",
+  "class_uid": 4001,
+  "class_name": "Network Activity",
+  "type_uid": 400105,
+  "type_name": "Network Activity: Refuse",
+  "severity_id": 3,
+  "severity": "Medium",
+  "status_id": 2,
+  "status": "Failure",
+  "time": 1788220800000,
+  "timezone_offset": 0,
+  "message": "action=deny src=192.0.2.10 dst=198.51.100.20 dport=443",
+  "metadata": {
+    "uid": "64885082a2f556be778ea9569d6bccef02ec7f1073f0968becbb4763028ddfcc",
+    "version": "1.8.0",
+    "logged_time": 1788220860000,
+    "product": {
+      "name": "app",
+      "vendor_name": "Unknown",
+      "version": "2.1.1"
+    }
+  },
+  "unmapped": {
+    "rfc": 5424,
+    "priority": 134,
+    "version": "1",
+    "pid": "-",
+    "message_id": "-",
+    "structured_data": "-",
+    "action": "deny",
+    "src": "192.0.2.10",
+    "dst": "198.51.100.20",
+    "dport": "443",
+    "detection_confidence": 0.96
+  },
+  "src_endpoint": {
+    "ip": "192.0.2.10"
+  },
+  "dst_endpoint": {
+    "ip": "198.51.100.20",
+    "port": 443
+  }
+}

@@ -1,0 +1,41 @@
+{
+  "activity_id": 2,
+  "activity_name": "Read",
+  "category_uid": 6,
+  "category_name": "Application Activity",
+  "class_uid": 6003,
+  "class_name": "API Activity",
+  "type_uid": 600302,
+  "type_name": "API Activity: Read",
+  "severity_id": 1,
+  "severity": "Informational",
+  "status_id": 1,
+  "status": "Success",
+  "time": 1788220800000,
+  "timezone_offset": 0,
+  "message": "Read requested",
+  "metadata": {
+    "uid": "904caded1f1f9d25c03ee12f1e9b6b0764124d6b3cb8ca72286165a9bf4d630d",
+    "version": "1.8.0",
+    "logged_time": 1788220860000,
+    "product": {
+      "name": "example-api",
+      "vendor_name": "Application",
+      "version": "1.2.0"
+    }
+  },
+  "unmapped": {
+    "detection_confidence": 0.8
+  },
+  "src_endpoint": {
+    "ip": "192.0.2.10"
+  },
+  "actor": {
+    "user": {
+      "name": "alice"
+    }
+  },
+  "api": {
+    "operation": "read"
+  }
+}

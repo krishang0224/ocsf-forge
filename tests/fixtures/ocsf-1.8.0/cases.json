@@ -1,0 +1,10 @@
+[
+  {"name":"cef-finding","filename":"event.cef","contract":"detection_finding","input":"CEF:0|Example|Sensor|1|42|Blocked connection|7|rt=2026-09-01T00:00:00Z src=192.0.2.10 msg=Blocked by policy"},
+  {"name":"leef-finding","filename":"event.leef","contract":"detection_finding","input":"LEEF:1.0|Example|Sensor|1|42|devTime=2026-09-01T00:00:00Z\tsrc=192.0.2.10\tmsg=Blocked by policy"},
+  {"name":"json-authentication","filename":"event.json","contract":"authentication","input":"{\"timestamp\":\"2026-09-01T00:00:00Z\",\"action\":\"login_failure\",\"user\":\"alice\",\"src_ip\":\"192.0.2.10\",\"service\":\"ssh\",\"message\":\"Login failed\"}"},
+  {"name":"syslog-network","filename":"event.log","contract":"network_activity","input":"<134>1 2026-09-01T00:00:00Z firewall app - - - action=deny src=192.0.2.10 dst=198.51.100.20 dport=443"},
+  {"name":"apache-http","filename":"access.log","contract":"http_activity","input":"192.0.2.10 - alice [01/Sep/2026:00:00:00 +0000] \"GET /login HTTP/1.1\" 403 123"},
+  {"name":"log4j-error","filename":"event.log","contract":"application_error","input":"2026-09-01 00:00:00,000 ERROR [main] example.Service: Request failed"},
+  {"name":"csv-api","filename":"event.csv","contract":"api_activity","input":"timestamp,action,user,service,message\n2026-09-01T00:00:00Z,read,alice,example-api,Read requested\n"},
+  {"name":"xml-api","filename":"event.xml","contract":"api_activity","input":"<event><timestamp>2026-09-01T00:00:00Z</timestamp><action>read</action><user>alice</user><src_ip>192.0.2.10</src_ip><service>example-api</service><message>Read requested</message></event>"}
+]

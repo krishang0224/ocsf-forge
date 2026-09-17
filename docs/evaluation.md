@@ -4,6 +4,12 @@ Start with `python -m ulpf demo` from the repository root using Python 3.11. No 
 
 Next, run `python -m ulpf normalize your-logs.jsonl > normalized.jsonl`. Inspect stderr and the exit status before using the output: rejected events are not included in stdout. Keep the input file because this offline command does not store quarantine. Use the full lakehouse when durable raw/quarantine tables and SQL are required.
 
+## Install the offline CLI
+
+From a clone, `python -m pip install .` installs the `ocsf-forge` command with no runtime dependencies. Run `ocsf-forge demo` from any directory. The installed distribution exposes its version through `importlib.metadata.version("ocsf-forge")`, sourced from `ulpf.__version__` rather than a second version constant. This does not imply a published PyPI release.
+
+For dashboard dependencies use `python -m pip install '.[homelab]'` or `python -m pip install '.[lakehouse]'`. These extras reuse the pinned requirement files. Keep the checkout for `app.py`, Compose deployment, examples and validation fixtures; the wheel intentionally contains the `ulpf` package and CLI, not a full deployment bundle. Python 3.11 is the CI-tested runtime; newer Python/dependency combinations are not certified.
+
 ## What to verify
 
 - Normalize a representative sample from the intended source. Generic JSON/XML support is not a substitute for vendor-specific field mapping.

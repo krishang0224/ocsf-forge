@@ -5,3 +5,8 @@ __pycache__/
 .pytest_cache/
 .ruff_cache/
 *.pyc
+build/
+dist/
+*.egg-info/
+.coverage
+coverage.xml

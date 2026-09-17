@@ -21,18 +21,20 @@
     "product": {
       "name": "ssh",
       "vendor_name": "Application",
-      "version": "2.2.1"
+      "version": "2.2.2"
     }
   },
   "unmapped": {
+    "service": "ssh",
     "detection_confidence": 0.95
   },
   "src_endpoint": {
     "ip": "192.0.2.10"
   },
-  "actor": {
-    "user": {
-      "name": "alice"
-    }
+  "user": {
+    "name": "alice"
+  },
+  "service": {
+    "name": "ssh"
   }
 }

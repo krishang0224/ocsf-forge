@@ -12,10 +12,7 @@
   {
     "fixture": "json-authentication",
     "class_uid": 3002,
-    "errors": [
-      "at_least_one required: service, dst_endpoint",
-      "missing required attribute: user"
-    ]
+    "errors": []
   },
   {
     "fixture": "syslog-network",

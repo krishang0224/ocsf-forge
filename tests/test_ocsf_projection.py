@@ -1,3 +1,4 @@
+import json
 from dataclasses import replace
 
 import pytest
@@ -20,3 +21,17 @@ def test_findings_retain_endpoints_and_user_without_forbidden_root_attributes(li
     assert context["actor"]["user"]["name"] == "alice"
     assert record["unmapped"]["source_fields"]["normalized_context"] == "vendor value"
     assert event.metadata == {"normalized_context": "vendor value"}
+
+
+def test_authentication_exports_target_user_and_explicit_service():
+    event = run_pipeline([json.dumps({"action": "login_failure", "user": "alice", "service": "ssh"})])[0]
+    record = event.to_ocsf_dict()
+    assert record["user"] == {"name": "alice"}
+    assert record["service"] == {"name": "ssh"}
+    assert "actor" not in record
+
+
+def test_authentication_does_not_invent_missing_service_or_user():
+    record = run_pipeline(['{"action":"login_failure"}'])[0].to_ocsf_dict()
+    assert "service" not in record
+    assert "user" not in record

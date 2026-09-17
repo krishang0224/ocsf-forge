@@ -4,7 +4,7 @@ The target is OCSF 1.8.0, but the current exporter is **not fully conformant**. 
 
 ## Current result
 
-5/8 original fixtures pass after the finding projection correction. Authentication, HTTP and incomplete CSV API evidence remain unresolved. See [pre-fix diagnosis](validation-diagnosis.md).
+6/8 original fixtures pass after the finding and Authentication projection corrections. HTTP and incomplete CSV API evidence remain unresolved. See [pre-fix diagnosis](validation-diagnosis.md).
 
 ## Independently checked baseline results
 

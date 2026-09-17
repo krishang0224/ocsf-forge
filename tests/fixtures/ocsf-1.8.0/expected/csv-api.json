@@ -21,7 +21,7 @@
     "product": {
       "name": "example-api",
       "vendor_name": "Application",
-      "version": "1.1.0"
+      "version": "1.1.1"
     }
   },
   "unmapped": {

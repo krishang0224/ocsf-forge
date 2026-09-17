@@ -10,6 +10,8 @@ The current target is [OCSF 1.8.0](https://github.com/ocsf/ocsf-schema/tree/1.8.
 
 Original payloads remain in `raw_events`. Unmapped vendor fields are retained as metadata, and invalid records enter quarantine with a reason. A shared schema should not require discarding source evidence.
 
+SHA-256 is computed at ingestion over the retained logical payload and stored alongside it. Current data and Batch preview expose `raw_payload_hash`. A mismatch detects a changed payload or digest; agreement alone does not prove immutability if both can be replaced, nor authenticity before ingestion. Structured input may be reserialized, so this is not a whole-upload byte digest. See [verification queries and threat model](evidence-integrity.md).
+
 ## Limits and tradeoffs
 
 7/8 fixtures currently pass the official OCSF validator — see the [version-pinned fixture audit](ocsf-validation.md). This is not full conformance.

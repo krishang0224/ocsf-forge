@@ -168,7 +168,7 @@ FROM iceberg.logging.application_logs
 
 RECENT_QUERY = """
 SELECT event_timestamp, log_level, service_name, source_format, ip_address,
-       user_id, action, message, event_id
+       user_id, action, message, event_id, raw_payload_hash
 FROM iceberg.logging.application_logs
 ORDER BY event_timestamp DESC
 LIMIT 500

@@ -86,6 +86,7 @@ def render_batch_preview(events: list) -> None:
         "message",
         "parse_success",
         "parse_notes",
+        "raw_payload_hash",
     ]
     st.dataframe(frame[columns], width="stretch", height=420, hide_index=True)
     if not st.button("Prepare full-batch downloads"):

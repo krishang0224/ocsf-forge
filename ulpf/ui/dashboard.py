@@ -111,6 +111,7 @@ def render_dashboard(trino: QueryBackend) -> None:
                 )
                 st.plotly_chart(fig, width="stretch")
         st.subheader("Recent events")
+        st.caption("raw_payload_hash is SHA-256 of the retained logical payload; it is not a signature or tamper-proof seal.")
         st.dataframe(recent, width="stretch", height=390, hide_index=True)
     with ingestion_tab:
         st.subheader("Parser coverage")

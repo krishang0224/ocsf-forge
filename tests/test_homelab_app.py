@@ -24,6 +24,7 @@ with patch.object(socket.socket, 'connect', side_effect=AssertionError('Unexpect
     next(button for button in app.button if button.label == 'Ingest into DuckDB').click().run(timeout=30)
     assert not app.exception, app.exception
     assert app.metric[0].value == '8'
+    assert sum('raw_payload_hash' in frame.value.columns for frame in app.dataframe) >= 2
     next(button for button in app.button if button.label == 'Ingest into DuckDB').click().run(timeout=30)
     assert any('8 duplicates' in item.value for item in app.success)
     next(button for button in app.button if button.label == 'Run query').click().run(timeout=30)

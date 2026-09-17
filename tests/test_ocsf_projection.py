@@ -4,6 +4,8 @@ from dataclasses import replace
 import pytest
 
 from ulpf.pipeline import run_pipeline
+from validation.fixtures import FIXTURES, cases, export
+from validation.ocsf_contract import check
 
 
 @pytest.mark.parametrize("line", [
@@ -35,3 +37,26 @@ def test_authentication_does_not_invent_missing_service_or_user():
     record = run_pipeline(['{"action":"login_failure"}'])[0].to_ocsf_dict()
     assert "service" not in record
     assert "user" not in record
+
+
+@pytest.mark.parametrize("size", ["123", "-"])
+def test_http_exports_response_and_preserves_request_and_authenticated_user(size):
+    line = f'192.0.2.1 - alice [01/Sep/2026:00:00:00 +0000] "POST /submit HTTP/1.1" 403 {size}'
+    record = run_pipeline([line])[0].to_ocsf_dict()
+    assert record["http_response"]["code"] == 403
+    assert "actor" not in record
+    assert record["unmapped"]["normalized_context"]["actor"]["user"]["name"] == "alice"
+    assert record["unmapped"]["path"] == "/submit"
+    assert record["unmapped"]["protocol"] == "HTTP/1.1"
+    if size == "-":
+        assert "body_length" not in record["http_response"]
+    else:
+        assert record["http_response"]["body_length"] == 123
+
+
+def test_incomplete_api_fixture_remains_a_visible_failure_without_invented_endpoint():
+    case = next(case for case in cases() if case["name"] == "csv-api")
+    record = export(case)
+    assert "src_endpoint" not in record
+    contract = json.loads((FIXTURES / "contracts/api_activity.json").read_text())
+    assert "missing required attribute: src_endpoint" in check(record, contract)

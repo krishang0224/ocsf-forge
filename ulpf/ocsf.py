@@ -20,3 +20,11 @@ def project_class(event, record):
         service = (event.metadata or {}).get("service")
         if isinstance(service, str) and service:
             record["service"] = {"name": service}
+    elif event.class_uid == 4002:
+        retain_context(record, ("actor",))
+        fields = event.metadata or {}
+        code = fields.get("http_status")
+        if type(code) is int:
+            record["http_response"] = {"code": code}
+            if type(fields.get("bytes")) is int:
+                record["http_response"]["body_length"] = fields["bytes"]

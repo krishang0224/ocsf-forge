@@ -31,14 +31,20 @@
     "protocol": "HTTP/1.1",
     "referer": "",
     "user_agent": "",
-    "detection_confidence": 0.92
+    "detection_confidence": 0.92,
+    "normalized_context": {
+      "actor": {
+        "user": {
+          "name": "alice"
+        }
+      }
+    }
   },
   "src_endpoint": {
     "ip": "192.0.2.10"
   },
-  "actor": {
-    "user": {
-      "name": "alice"
-    }
+  "http_response": {
+    "code": 403,
+    "body_length": 123
   }
 }

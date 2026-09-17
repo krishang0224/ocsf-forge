@@ -4,6 +4,8 @@ Changes to parser output, event identity, and storage layout are recorded here. 
 
 ## Unreleased
 
+- Fix #10: HTTP exports the observed response code/body length and retains logged user context outside forbidden root `actor`. Regression: `test_http_exports_response_and_preserves_request_and_authenticated_user`, including unknown response size. Official original-fixture result: 7/8; missing API endpoint evidence is explicitly deferred in #11.
+
 - Fix #9: project Authentication subjects to `user` and retain explicitly supplied services for export. Do not infer missing services from product defaults. JSON/CSV/XML parser versions become 2.2.2/1.1.1/1.2.1. Regression: `test_authentication_exports_target_user_and_explicit_service`; missing-evidence test prevents fabrication.
 - Preserve existing finding rule metadata paths when adding normalized context; only wrap source metadata if its own `normalized_context` key would collide. Full detection/CLI tests cover this compatibility boundary.
 

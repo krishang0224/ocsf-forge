@@ -4,7 +4,15 @@ The target is OCSF 1.8.0, but the current exporter is **not fully conformant**. 
 
 ## Current result
 
-6/8 original fixtures pass after the finding and Authentication projection corrections. HTTP and incomplete CSV API evidence remain unresolved. See [pre-fix diagnosis](validation-diagnosis.md).
+7/8 original fixtures pass after the finding, Authentication and HTTP projection corrections. All eight were rerun after each correction. An interrupted Authentication-stage network run was retried in full, not counted as a pass. See [pre-fix diagnosis](validation-diagnosis.md).
+
+The original inputs were not changed. CEF/LEEF context is retained under `unmapped.normalized_context`; existing vendor fields stay at their previous paths unless their key collides, in which case they are wrapped under `source_fields`. Authentication exports the target `user` and explicit `service`. HTTP exports recorded response status/body length, retaining request details and user context without fabricating a full URL. Flattened storage is unchanged; old persisted interchange JSON is not migrated automatically.
+
+### Deferred: incomplete API evidence (#11)
+
+The CSV API fixture still fails `attribute_required_missing` for `src_endpoint`. Its input has no source address. This is an intentional, visible failure, not a corrected event: no fake IP, empty object or replacement fixture has been used to inflate the count. Quarantining all incomplete API events or adding strict-export rejection affects CLI, UI downloads, ingestion and historical records. That policy is deferred in [issue #11](https://github.com/krishang0224/ocsf-forge/issues/11). Do not use these exports in a consumer requiring full conformance until the required source evidence and export policy are supplied.
+
+Regression tests in `tests/test_ocsf_projection.py` cover each corrected shape, metadata collisions, absent service/user fields and missing API addresses. The default audit still exits 1. Only the explicitly named known-gap baseline passes.
 
 ## Independently checked baseline results
 
@@ -21,7 +29,7 @@ On September 17, 2026 (Asia/Kolkata), all eight bundled synthetic fixtures were 
 | CSV API | 6003 | Missing required `src_endpoint` |
 | XML API | 6003 | No errors or warnings |
 
-These are findings about these exact examples, not pass rates for production data or guarantees about every event of a format. The CSV source lacks an address; inventing one just to satisfy a schema is not a valid fix. Other failures require class-specific export mappings. Runtime mappings and persisted data have not been changed by this audit.
+These baseline findings describe exact examples, not production pass rates or guarantees about every event of a format. Current corrections are recorded above; persisted data is not rewritten.
 
 ## Reproduce
 

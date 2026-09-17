@@ -22,10 +22,7 @@
   {
     "fixture": "apache-http",
     "class_uid": 4002,
-    "errors": [
-      "at_least_one required: http_request, http_response",
-      "attribute not in selected base class: actor"
-    ]
+    "errors": []
   },
   {
     "fixture": "log4j-error",

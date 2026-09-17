@@ -25,16 +25,20 @@
     }
   },
   "unmapped": {
-    "rt": "2026-09-01T00:00:00Z",
-    "src": "192.0.2.10",
-    "msg": "Blocked by policy",
-    "cef_version": "0",
-    "device_version": "1",
-    "signature_id": "42",
-    "detection_confidence": 1
-  },
-  "src_endpoint": {
-    "ip": "192.0.2.10"
+    "source_fields": {
+      "rt": "2026-09-01T00:00:00Z",
+      "src": "192.0.2.10",
+      "msg": "Blocked by policy",
+      "cef_version": "0",
+      "device_version": "1",
+      "signature_id": "42",
+      "detection_confidence": 1.0
+    },
+    "normalized_context": {
+      "src_endpoint": {
+        "ip": "192.0.2.10"
+      }
+    }
   },
   "finding_info": {
     "title": "Blocked by policy",

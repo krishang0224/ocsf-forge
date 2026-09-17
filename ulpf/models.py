@@ -5,6 +5,8 @@ from dataclasses import asdict, dataclass
 from datetime import datetime
 from typing import Any
 
+from ulpf.ocsf import project_class
+
 
 @dataclass
 class NormalizedEvent:
@@ -54,7 +56,7 @@ class NormalizedEvent:
         return asdict(self)
 
     def to_ocsf_dict(self) -> dict[str, Any]:
-        """Return a canonical OCSF event shape for interchange."""
+        """Project the normalized model into the supported OCSF class shape."""
         event_time = datetime.fromisoformat((self.timestamp or self.observed_at).replace("Z", "+00:00"))
         logged_time = datetime.fromisoformat(self.observed_at.replace("Z", "+00:00"))
         record: dict[str, Any] = {
@@ -108,6 +110,7 @@ class NormalizedEvent:
         elif self.class_uid == 6003:
             record.setdefault("actor", {"user": {"name": "unknown"}})
             record["api"] = {"operation": self.action or self.activity_name}
+        project_class(self, record)
         return record
 
     def to_json(self) -> str:

@@ -13,7 +13,7 @@
   "status": "Failure",
   "time": 1788220800000,
   "timezone_offset": 0,
-  "message": "GET /login → 403",
+  "message": "GET /login \u2192 403",
   "metadata": {
     "uid": "56b1846e304376b53ea77670f540267b3b03cbe0afe008952dccac8100713f81",
     "version": "1.8.0",

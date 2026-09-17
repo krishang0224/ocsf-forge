@@ -12,7 +12,7 @@ An optional detection worker identifies repeated authentication failures, possib
 
 The project exists for a familiar reason: collecting logs is easy; making eight incompatible formats useful in the same query is not.
 
-**Export compatibility:** the [OCSF 1.8.0 fixture audit](docs/ocsf-validation.md) found structural failures in five of eight synthetic examples. The current exporter is not fully schema-conformant; check those limits before depending on its JSON output.
+**Export compatibility:** 5/8 synthetic fixtures currently pass the official OCSF validator; see the [OCSF 1.8.0 fixture audit](docs/ocsf-validation.md). The current exporter is not fully schema-conformant.
 
 ![Terminal-theme dashboard showing stored event totals, severity distribution, services, and recent events](docs/images/dashboard.png)
 

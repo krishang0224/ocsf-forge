@@ -147,7 +147,7 @@ def test_ocsf_export_contains_canonical_names_and_required_finding_info():
     assert exported["severity_id"] == 5
     assert exported["type_name"] == "Detection Finding: Create"
     assert exported["finding_info"]["uid"] == "42"
-    assert exported["src_endpoint"]["ip"] == "10.0.0.1"
+    assert exported["unmapped"]["normalized_context"]["src_endpoint"]["ip"] == "10.0.0.1"
 
 
 def test_unknown_ocsf_class_fails_closed():

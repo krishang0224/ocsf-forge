@@ -28,7 +28,8 @@ def test_audit_exit_code_distinguishes_failures_from_baseline(baseline, expected
     assert result.returncode == expected_code, result.stderr
     summary = json.loads(result.stdout.splitlines()[-1])
     assert summary["full_schema_conformance"] == "not established"
-    assert summary["failed"] == 5
+    baseline_errors = json.loads((FIXTURES / "known-gaps.json").read_text())
+    assert summary["failed"] == sum(bool(result["errors"]) for result in baseline_errors)
 
 
 @pytest.mark.parametrize("value", [None, [], "1.8.0", 1])

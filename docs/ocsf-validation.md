@@ -2,7 +2,11 @@
 
 The target is OCSF 1.8.0, but the current exporter is **not fully conformant**. Passing parser tests establishes neither schema conformance nor correct vendor semantics.
 
-## Independently checked results
+## Current result
+
+5/8 original fixtures pass after the finding projection correction. Authentication, HTTP and incomplete CSV API evidence remain unresolved. See [pre-fix diagnosis](validation-diagnosis.md).
+
+## Independently checked baseline results
 
 On September 17, 2026 (Asia/Kolkata), all eight bundled synthetic fixtures were submitted to the [official, version-pinned validator](https://schema.ocsf.io/1.8.0/api/v2/validate). Three passed without errors or warnings; five failed:
 

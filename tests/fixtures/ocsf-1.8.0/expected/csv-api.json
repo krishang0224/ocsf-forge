@@ -25,7 +25,7 @@
     }
   },
   "unmapped": {
-    "detection_confidence": 0
+    "detection_confidence": 0.0
   },
   "actor": {
     "user": {

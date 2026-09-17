@@ -2,16 +2,12 @@
   {
     "fixture": "cef-finding",
     "class_uid": 2004,
-    "errors": [
-      "attribute not in selected base class: src_endpoint"
-    ]
+    "errors": []
   },
   {
     "fixture": "leef-finding",
     "class_uid": 2004,
-    "errors": [
-      "attribute not in selected base class: src_endpoint"
-    ]
+    "errors": []
   },
   {
     "fixture": "json-authentication",

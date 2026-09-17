@@ -4,6 +4,8 @@ Changes to parser output, event identity, and storage layout are recorded here. 
 
 ## Unreleased
 
+- Fix #8: Detection Finding no longer emits forbidden root endpoints/actor. Preserve those fields under `unmapped.normalized_context` with original vendor metadata under `source_fields`. Flattened storage is unchanged; previously saved JSON is not rewritten. Regression: `test_findings_retain_endpoints_and_user_without_forbidden_root_attributes`.
+
 - Publish version-pinned OCSF fixtures and an opt-in official validator check. Document five failing synthetic exports without changing mappings or claiming conformance; CI checks the known-gap regression baseline.
 - Add a worked Syslog example, documentation index, configuration entry points and evidence-hash verification limits.
 

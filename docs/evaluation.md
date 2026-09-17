@@ -35,6 +35,8 @@ The catalog bootstrap now serializes credentials, rejects unexpected conflicts, 
 
 ## Adoption gates still ahead
 
+CI prints statement/branch coverage for `ulpf` with missing-line details (`pytest --cov=ulpf --cov-branch --cov-report=term-missing`). This is an in-process unit-test measurement: live integrations and code executed only by separate CLI/UI subprocesses are not included. No coverage percentage is treated as evidence of schema conformance, and no artificial pass threshold has been added.
+
 Before advertising production readiness, establish full OCSF schema-conformance tests, representative vendor fixtures with documented mappings, authenticated deployment tests, fresh-volume integration CI, and recovery tests covering broker/storage failures. Publish versioned releases and a repeatable hardware-labelled benchmark harness before treating throughput results as a capacity-planning guide.
 
 These are stronger evidence for adoption than adding more rule names without fixtures or claiming support for every log format.

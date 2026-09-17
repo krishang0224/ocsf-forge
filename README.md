@@ -14,6 +14,8 @@ The project exists for a familiar reason: collecting logs is easy; making eight 
 
 **Export compatibility:** 7/8 synthetic fixtures currently pass the official OCSF validator; see the [OCSF 1.8.0 fixture audit](docs/ocsf-validation.md). The incomplete CSV API fixture still fails; the current exporter is not fully schema-conformant.
 
+Recent reliability changes: [stale-run watchdog and replay limits](docs/operations.md#stale-run-watchdog), [installable CLI](docs/evaluation.md#install-the-offline-cli), [payload hash verification](docs/evidence-integrity.md), and [safe UI diagnostics](docs/production-security.md). CI reports test coverage and checks the installed CLI outside the checkout.
+
 ![Terminal-theme dashboard showing stored event totals, severity distribution, services, and recent events](docs/images/dashboard.png)
 
 Screenshots captured from the running app on September 9, 2026, using retained bundled samples and the synthetic authentication demo. Counts and quarantine rates reflect that historical demo data, not a fresh run or a throughput benchmark. [Why OCSF?](docs/why-ocsf.md)

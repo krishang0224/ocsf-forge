@@ -98,8 +98,8 @@ with tab_about:
         "Files / Kafka · JSON / Syslog / CEF / LEEF / XML / CSV\n"
         "        │\n"
         "        ▼\n"
-        "Immutable raw events ─── failures ───▶ Quarantine\n"
-        "        │ parser registry + OCSF validation\n"
+        "Retained raw events ─── failures ───▶ Quarantine\n"
+        "        │ parser registry + field validation\n"
         "        ▼\n"
         "Normalized events ─── Trino ─────▶ Lakekeeper REST Catalog\n"
         "        │                              │\n"
@@ -107,7 +107,7 @@ with tab_about:
         language="text",
     )
     st.markdown(
-        "Every record first enters an immutable raw table. Valid OCSF events are merged idempotently into the normalized table; failures enter quarantine with parser and validation details. Lakekeeper persists catalog state in PostgreSQL while MinIO retains Parquet and Iceberg metadata."
+        "Raw evidence is retained. Accepted normalized events are merged idempotently; parsing and field-validation failures enter quarantine. These checks do not establish full OCSF conformance. Lakekeeper persists catalog state in PostgreSQL while MinIO retains Parquet and Iceberg metadata."
     )
     st.markdown("**Safety defaults**")
     st.markdown(

@@ -26,7 +26,15 @@ jobs:
       - name: Lint
         run: ruff check .
       - name: Tests
-        run: pytest -q
+        run: pytest -q --cov=ulpf --cov-branch --cov-report=term-missing --cov-report=xml
+      - name: Install and smoke-test packaged CLI outside checkout
+        run: |
+          python -m pip wheel --no-deps --wheel-dir /tmp/ocsf-wheel .
+          python -m venv /tmp/ocsf-package-check
+          /tmp/ocsf-package-check/bin/pip install --no-deps --no-index --find-links /tmp/ocsf-wheel ocsf-forge
+          cd /tmp
+          /tmp/ocsf-package-check/bin/ocsf-forge demo
+          /tmp/ocsf-package-check/bin/python -c 'from importlib.metadata import version; import ulpf; assert version("ocsf-forge") == ulpf.__version__'
       - name: OCSF fixture regression (known gaps, not certification)
         run: python -m validation.check_ocsf --check-baseline
       - name: Validate all Compose profiles

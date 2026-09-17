@@ -8,6 +8,7 @@ Start with the [repository overview and quickstarts](../README.md). Choose the o
 | How do I run the lightweight dashboard? | [Homelab setup, resource limits and SQL differences](homelab-mode.md) |
 | What does the OCSF mapping guarantee? | [Why OCSF and mapping limits](why-ocsf.md) |
 | Can I independently check the exports? | [OCSF fixture audit and known failures](ocsf-validation.md) |
+| Why were the latest reliability changes made? | [Item-by-item diagnosis, decisions and regression evidence](reliability-review.md) |
 | How do I check the retained payload? | [Evidence hashes and their limits](evidence-integrity.md) |
 | How do I add a log source? | [Parser development](parser-development.md) and [contributing](../CONTRIBUTING.md) |
 | What do the authentication rules detect? | [Detection, evidence and worker operations](detection.md) |

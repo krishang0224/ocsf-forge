@@ -4,6 +4,12 @@ Changes to parser output, event identity, and storage layout are recorded here. 
 
 ## Unreleased
 
+- Display stored SHA-256 digests in Current data and Batch preview without adding duplicate hash computation. Document the digest's limited threat model.
+- Add a flag-only stale-run watchdog to maintenance with independent polling and timeout settings; preserve run rows and avoid unsafe automatic replay.
+- Package the dependency-free CLI with optional pinned homelab/lakehouse dependencies, reusing the existing version source. Test installation outside the checkout in CI.
+- Log UI exceptions server-side with reference IDs. Raw exception details require explicit `ULPF_DEBUG_ERRORS=true`; default behavior covers ingestion, queries, findings and dashboard loading.
+- Report statement/branch coverage in CI and distinguish prior Podman end-to-end testing from Docker Compose configuration validation.
+
 - Fix #10: HTTP exports the observed response code/body length and retains logged user context outside forbidden root `actor`. Regression: `test_http_exports_response_and_preserves_request_and_authenticated_user`, including unknown response size. Official original-fixture result: 7/8; missing API endpoint evidence is explicitly deferred in #11.
 
 - Fix #9: project Authentication subjects to `user` and retain explicitly supplied services for export. Do not infer missing services from product defaults. JSON/CSV/XML parser versions become 2.2.2/1.1.1/1.2.1. Regression: `test_authentication_exports_target_user_and_explicit_service`; missing-evidence test prevents fabrication.

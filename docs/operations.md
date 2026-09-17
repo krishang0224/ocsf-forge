@@ -37,6 +37,10 @@ The `operations` profile runs `ulpf.maintenance` once per configured interval. C
 
 Align retention with incident-response and compliance requirements before shortening it. Pause maintenance during a coordinated restore or catalog migration.
 
+## Compose verification scope
+
+Podman Compose has been run end-to-end against this repository's full local stack, including ingestion and Kafka/Trino recovery in the [dated stress audit](stress-testing.md). It is not merely an assumed-compatible alternative. Docker Compose is checked for configuration validity in CI; that check is not an end-to-end Docker run. No minimum-version compatibility matrix has been established, and this change set does not claim a fresh live-stack boot.
+
 ## Monitoring
 
 Alert on failed or stale ingestion runs, falling parser success rate, quarantine growth, Kafka consumer lag, unavailable Trino/Lakekeeper/MinIO health, excessive Iceberg data files, and backup age. The dashboard exposes parser quality, recent runs, snapshot count, file count, and average file size for initial operations.

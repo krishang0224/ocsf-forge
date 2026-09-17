@@ -1,0 +1,22 @@
+{
+  "schema": {
+    "version": "1.8.0",
+    "commit": "6fa6499a0f8c9f449d342816e90e5f687c224b0a",
+    "url": "https://codeload.github.com/ocsf/ocsf-schema/tar.gz/6fa6499a0f8c9f449d342816e90e5f687c224b0a",
+    "sha256": "2c14a7271288d1330c6b19da5e80bda3185447f52eb97411d9353aea6fba0ef0",
+    "root": "ocsf-schema-6fa6499a0f8c9f449d342816e90e5f687c224b0a"
+  },
+  "compiler": {
+    "commit": "865887a9ee88580c471062f93da115e7599fa31d",
+    "url": "https://codeload.github.com/ocsf/ocsf-schema-compiler/tar.gz/865887a9ee88580c471062f93da115e7599fa31d",
+    "sha256": "3e8ee184da4d204fa88582029054d26ab8332d6a19487e8ea0f87fc55924fe1d",
+    "root": "ocsf-schema-compiler-865887a9ee88580c471062f93da115e7599fa31d"
+  },
+  "toolkit": {
+    "version": "v0.9.0",
+    "commit": "a99619fcd148791a6a9fe5f82c1e0d839f658591",
+    "url": "https://github.com/ocsf/ocsf-toolkit/releases/download/v0.9.0/ocsf-toolkit_v0.9.0_linux_amd64.tar.gz",
+    "sha256": "641fec9f8c457896c06ead9136fe8f4e50753cd95f8a68c24b25c2bcc9cfd5a5",
+    "root": "ocsf-toolkit_v0.9.0_linux_amd64"
+  }
+}

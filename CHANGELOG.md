@@ -4,6 +4,9 @@ Changes to parser output, event identity, and storage layout are recorded here. 
 
 ## Unreleased
 
+- Add an independent offline official OCSF Toolkit CI gate against checksum-pinned toolkit/compiler/schema artifacts. Enforce each fixture's exact outcome and distinguish regressions from infrastructure failures; hosted validation is no longer the only recursive check.
+- Add nested-field negative controls, wrong-reason/extra-error checks for the known-negative fixture, and 32 security/text parser edge-case tests. No runtime parser behavior or fixture source inputs changed.
+
 - Display stored SHA-256 digests in Current data and Batch preview without adding duplicate hash computation. Document the digest's limited threat model.
 - Add a flag-only stale-run watchdog to maintenance with independent polling and timeout settings; preserve run rows and avoid unsafe automatic replay.
 - Package the dependency-free CLI with optional pinned homelab/lakehouse dependencies, reusing the existing version source. Test installation outside the checkout in CI.

@@ -1,5 +1,15 @@
 # Reliability review follow-up — September 17, 2026
 
+## Subsequent follow-up: permanent schema gate and parser edge cases
+
+The earlier hosted validation runs were manual. CI's snapshot comparison and partial top-level checker could not independently reject a nested schema violation after its snapshot was updated. The new `ocsf-schema-gate` job closes that gap with the official offline OCSF Toolkit v0.9.0 and official compiler, both pinned alongside schema 1.8.0 in `validation/toolchain-lock.json`. Archive checksums are verified before execution. No replacement schema interpreter was written.
+
+The gate checks fresh exports, not snapshots: the seven named positives must have zero findings; CSV must have only its specific missing-endpoint error. Warnings, extra errors, different failing fixtures, malformed reports and incomplete processing cannot masquerade as expected results. Infrastructure failure is separate from a changed validation result. Tests deliberately corrupt nested user names, HTTP response codes and IP addresses, and add an extra error to CSV. [Setup, reproduction and limitations](ocsf-validation.md#offline-official-gate).
+
+Thirty-two additional parser tests cover malformed headers, severity boundaries, escaped equals, LEEF delimiters, invalid dates, leap-day/year inference, nil timestamps and unknown HTTP methods. No parser behavior or original fixture input was changed. With the toolkit prepared, the local full suite passed **311 tests, with 2 skipped**. Security parsing now covers **59/59 statements and 12/12 branches**; text parsing covers **82/82 statements and 14/14 branches**. Across `ulpf/parsing/`, coverage is **324/331 statements (97.9%) and 74/76 branches (97.4%)**. Overall measured coverage is 79%; subprocess-only and live paths remain outside that measurement. These are execution metrics, not correctness guarantees.
+
+The original eight-fixture validity result remains **7/8**, not 8/8. Issue #11 remains open. The historical numbered report below records the preceding implementation pass.
+
 ## 1. Diagnose before fixing
 
 All original inputs were validated before code changes: 3/8 passed. [Diagnosis](validation-diagnosis.md) records class/category, exact errors and source-input links, committed separately in `8ef642b`.

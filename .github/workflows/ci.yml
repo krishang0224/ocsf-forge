@@ -10,6 +10,26 @@ permissions:
   contents: read
 
 jobs:
+  ocsf-schema-gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+        with:
+          python-version: '3.14'
+      - name: Prepare checksum-pinned official toolkit and OCSF 1.8.0 schema
+        run: python -m validation.prepare_toolkit
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+        with:
+          python-version: '3.11'
+      - run: python -m pip install pytest==8.4.2
+      - name: Offline official validation with exact per-fixture expectations
+        run: python -m validation.check_toolkit
+      - name: Prove nested regressions and wrong negative results are rejected
+        env:
+          ULPF_OCSF_TOOLKIT_DIRECTORY: .cache/ocsf-validator
+        run: pytest -q tests/test_toolkit_gate.py
   checks:
     runs-on: ubuntu-latest
     timeout-minutes: 10

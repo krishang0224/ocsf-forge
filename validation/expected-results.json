@@ -1,0 +1,10 @@
+{
+  "cef-finding": [],
+  "leef-finding": [],
+  "json-authentication": [],
+  "syslog-network": [],
+  "apache-http": [],
+  "log4j-error": [],
+  "csv-api": [["error", "validation_attribute_required_missing", "src_endpoint"]],
+  "xml-api": []
+}

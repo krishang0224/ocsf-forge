@@ -10,3 +10,4 @@ dist/
 *.egg-info/
 .coverage
 coverage.xml
+.cache/ocsf-validator/

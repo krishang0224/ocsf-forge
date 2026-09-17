@@ -9,3 +9,5 @@
 `known-gaps.json` records the deliberately failing partial-check baseline. Do not erase errors merely to make CI green. First correct and test the mapping, then review changed snapshots and document compatibility consequences.
 
 See the [audit results and reproduction commands](../../../docs/ocsf-validation.md). Full schema conformance is not established.
+
+The independent official toolkit gate validates fresh pipeline exports using [pinned upstream artifacts](../../../validation/toolchain-lock.json). Its [per-fixture expectations](../../../validation/expected-results.json) require no findings for the seven positives and only the missing `src_endpoint` error for CSV. It does not use the expected-output snapshots to decide schema validity.

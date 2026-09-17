@@ -21,7 +21,15 @@ ORDER BY started_at DESC
 LIMIT 100;
 ```
 
-Runs left in `RUNNING` indicate that the process stopped before final status was recorded. Reprocess the source and retain the original run row as audit evidence.
+Runs left in `RUNNING` may represent a live slow writer or a process that stopped before final status was recorded. Confirm the writer has stopped before replaying the source; retain the original run row as audit evidence.
+
+## Stale-run watchdog
+
+The operations-profile maintenance process checks for `RUNNING` rows older than `ULPF_STUCK_RUN_TIMEOUT_SECONDS` (default 3600). `ULPF_WATCHDOG_INTERVAL_SECONDS` defaults to 300; both must be positive integers. It emits structured JSON with `event=stale_ingestion_runs`, up to 100 oldest run IDs and a `truncated` flag. Route that event to your alert system. Empty checks emit `ingestion_watchdog_ok`; query failures emit `ingestion_watchdog_error`, not a healthy result.
+
+This is deliberately flag-only. Elapsed time is not proof of a dead writer, and a run row does not supply complete replayable source bytes or credentials. The watchdog does not change statuses, reclaim writers or retry ingestion. Inspect the process and replay the same source identity/offsets only when appropriate.
+
+Checks share the maintenance process, so a long maintenance operation can delay them; the interval is not an alerting SLA. The existing container healthcheck checks process liveness, not data freshness. An external log-based monitor must also alert when watchdog messages stop. The watchdog applies to Trino, not the atomic DuckDB homelab path.
 
 ## Maintenance
 

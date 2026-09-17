@@ -4,9 +4,11 @@ import json
 import os
 import signal
 import threading
+import time
 from datetime import UTC, datetime
 
 from ulpf.services.trino import TrinoService
+from ulpf.watchdog import stale_runs
 
 MAINTAINABLE_TABLES = ("raw_events", "application_logs", "quarantine_events", "ingestion_runs", "detections")
 
@@ -59,6 +61,12 @@ def run_once(service: TrinoService | None = None) -> dict:
 
 def main() -> None:
     interval = max(3600, int(os.getenv("ULPF_MAINTENANCE_INTERVAL_SECONDS", "86400")))
+    watchdog_interval = int(os.getenv("ULPF_WATCHDOG_INTERVAL_SECONDS", "300"))
+    timeout = int(os.getenv("ULPF_STUCK_RUN_TIMEOUT_SECONDS", "3600"))
+    if watchdog_interval < 1 or timeout < 1:
+        raise ValueError("Watchdog interval and stale-run timeout must be positive")
+    trino = TrinoService()
+    next_maintenance = 0.0
     stopped = threading.Event()
 
     def stop(*_args) -> None:
@@ -67,13 +75,18 @@ def main() -> None:
     signal.signal(signal.SIGTERM, stop)
     signal.signal(signal.SIGINT, stop)
     while not stopped.is_set():
-        delay = interval
         try:
-            print(json.dumps(run_once(), separators=(",", ":")), flush=True)
+            print(json.dumps(stale_runs(trino, timeout), separators=(",", ":")), flush=True)
         except Exception as exc:
-            print(json.dumps({"timestamp": datetime.now(UTC).isoformat(), "error": str(exc)}), flush=True)
-            delay = min(60, interval)
-        stopped.wait(delay)
+            print(json.dumps({"event": "ingestion_watchdog_error", "error": str(exc)}), flush=True)
+        if time.monotonic() >= next_maintenance:
+            try:
+                print(json.dumps(run_once(trino), separators=(",", ":")), flush=True)
+                next_maintenance = time.monotonic() + interval
+            except Exception as exc:
+                print(json.dumps({"timestamp": datetime.now(UTC).isoformat(), "error": str(exc)}), flush=True)
+                next_maintenance = time.monotonic() + 60
+        stopped.wait(min(watchdog_interval, max(0, next_maintenance - time.monotonic())))
 
 
 if __name__ == "__main__":

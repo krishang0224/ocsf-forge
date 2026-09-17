@@ -1,5 +1,5 @@
 streamlit==1.49.1
-pandas==2.3.2
+pandas==3.0.5
 plotly==6.3.0
 trino==0.336.0
 minio==7.2.16

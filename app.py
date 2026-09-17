@@ -16,6 +16,7 @@ from ulpf.services.minio import MinioService
 from ulpf.services.trino import TrinoService
 from ulpf.ui.dashboard import clear_dashboard_cache, render_dashboard
 from ulpf.ui.detections import render_detections
+from ulpf.ui.errors import error_reference, show_error
 from ulpf.ui.ingestion import render_batch_preview, render_ingestion_controls
 from ulpf.ui.sql_console import render_sql_console
 from ulpf.ui.theme import apply_theme
@@ -48,7 +49,7 @@ if trino_ready and not st.session_state.get("lakehouse_initialized"):
         writer.ensure_lakehouse()
         st.session_state["lakehouse_initialized"] = True
     except Exception as exc:
-        trino_ready, trino_detail = False, str(exc)
+        trino_ready, trino_detail = False, error_reference(exc, "Lakehouse initialization failed.")
 
 with st.sidebar:
     st.markdown('<p class="eyebrow">Mixed logs to OCSF</p>', unsafe_allow_html=True)
@@ -66,9 +67,7 @@ with st.sidebar:
                 )
                 clear_dashboard_cache()
             except Exception as exc:
-                st.error("Ingestion failed")
-                with st.expander("Detail"):
-                    st.code(str(exc))
+                show_error(exc, "Ingestion failed.")
     st.divider()
     st.markdown("### Stack")
     st.markdown(f"Trino: {'ready' if trino_ready else 'unavailable'}")

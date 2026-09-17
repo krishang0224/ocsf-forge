@@ -12,6 +12,6 @@ Before production:
 6. Encrypt persistent volumes and backups, define retention by data classification, and audit access to raw and quarantine evidence.
 7. Send application, Trino, Lakekeeper, Kafka, MinIO, and PostgreSQL audit logs to a separate protected destination.
 8. Scan and pin container images by digest in a controlled release pipeline, apply security updates, and test disaster recovery.
-9. Replace development UI exception details with server-side logging and a user-visible error reference before exposing the app beyond trusted local users. Current ingestion, query and connection diagnostics can contain backend addresses, SQL or source data; a collapsed expander is not an access-control boundary.
+9. Keep `ULPF_DEBUG_ERRORS=false` (default). UI ingestion, query and connection exceptions are logged server-side with a short error ID; the browser shows only a generic message and that ID. Explicit `ULPF_DEBUG_ERRORS=true` reveals exception text for trusted local debugging. Protect server logs because they can contain backend addresses, SQL, credentials or source data. A collapsed debug expander is not an access-control boundary.
 
 The repository cannot ship production OIDC client IDs, certificates, keys, network policy, or secret-manager bindings because they belong to the deployment environment. Treat those controls as release prerequisites, not optional application settings.

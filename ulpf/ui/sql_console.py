@@ -4,6 +4,7 @@ import streamlit as st
 
 from ulpf.services.backend import QueryBackend
 from ulpf.sql import EXAMPLE_QUERIES
+from ulpf.ui.errors import show_error
 
 
 def render_sql_console(trino: QueryBackend) -> None:
@@ -34,4 +35,4 @@ def render_sql_console(trino: QueryBackend) -> None:
                 "duckdb-results.csv" if local else "trino-results.csv", "text/csv", on_click="ignore",
             )
         except Exception as exc:
-            st.error(str(exc))
+            show_error(exc, "Query failed.")

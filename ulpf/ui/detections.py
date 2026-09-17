@@ -5,6 +5,7 @@ import json
 import streamlit as st
 
 from ulpf.detection.sql import RECENT_DETECTIONS
+from ulpf.ui.errors import show_error
 
 
 @st.cache_data(ttl=10, show_spinner=False)
@@ -34,9 +35,7 @@ def render_detections(trino) -> None:
     try:
         findings = _load_findings(trino)
     except Exception as exc:
-        st.error("Findings could not be loaded.")
-        with st.expander("Connection detail"):
-            st.code(str(exc))
+        show_error(exc, "Findings could not be loaded.")
         return
     if findings.empty:
         st.info("No local findings stored yet. Enable the detection Compose profile and ingest authentication events. Check worker logs to confirm scans are succeeding.")
@@ -59,7 +58,7 @@ def render_detections(trino) -> None:
             if len(evidence) < len(set(ids)):
                 st.warning("Some supporting events are missing, possibly because of retention or deletion. The finding alone is not complete evidence.")
         except Exception as exc:
-            st.error(f"Supporting events could not be loaded: {exc}")
+            show_error(exc, "Supporting events could not be loaded.")
     st.download_button("Download finding (OCSF JSON)", row["ocsf_json"], f"finding-{selected}.json", "application/json")
     with st.expander("OCSF finding"):
         st.json(json.loads(row["ocsf_json"]))

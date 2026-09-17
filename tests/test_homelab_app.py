@@ -32,12 +32,18 @@ with patch.object(socket.socket, 'connect', side_effect=AssertionError('Unexpect
     assert any('rows shown' in item.value for item in app.success)
     assert 'Local storage' in [tab.label for tab in app.tabs]
     assert 'Findings' not in [tab.label for tab in app.tabs]
+    with patch('ulpf.services.duckdb_backend.DuckDBBackend.ingest_events', side_effect=RuntimeError('secret-password')):
+        next(button for button in app.button if button.label == 'Ingest into DuckDB').click().run(timeout=30)
+        assert not app.exception, app.exception
+        assert any('Reference:' in item.value for item in app.error)
+        assert all('secret-password' not in item.value for item in app.error)
+        assert all('secret-password' not in item.value for item in app.code)
 assert not any(name.split('.')[0] in {'trino', 'minio', 'kafka'} for name in sys.modules)
 print('homelab UI passed without network connections or lakehouse imports')
 """
     result = subprocess.run(
         [sys.executable, "-c", code], capture_output=True, text=True, timeout=90,
-        env={**os.environ, "ULPF_BACKEND": "duckdb", "ULPF_HOMELAB_DIRECTORY": str(tmp_path)},
+        env={**os.environ, "ULPF_BACKEND": "duckdb", "ULPF_HOMELAB_DIRECTORY": str(tmp_path), "ULPF_DEBUG_ERRORS": "false"},
     )
     assert result.returncode == 0, result.stdout + result.stderr
 

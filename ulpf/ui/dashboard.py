@@ -14,6 +14,7 @@ from ulpf.sql import (
     SEVERITY_QUERY,
     WAREHOUSE_QUERY,
 )
+from ulpf.ui.errors import show_error
 
 
 @st.cache_data(ttl=10, show_spinner=False)
@@ -53,8 +54,7 @@ def render_dashboard(trino: QueryBackend) -> None:
     except Exception as exc:
         st.info("Local data could not be loaded. Check the database path and file permissions." if local else
                 "The lakehouse is starting. Once Trino and the catalog are ready, current Iceberg data appears here.")
-        with st.expander("Connection detail"):
-            st.code(str(exc))
+        show_error(exc, "Current data could not be loaded.")
         return
 
     row = overview.iloc[0] if not overview.empty else {}

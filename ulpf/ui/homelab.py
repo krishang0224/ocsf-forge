@@ -5,6 +5,7 @@ import streamlit as st
 from ulpf.config import Settings, settings
 from ulpf.services.backend import QueryBackend
 from ulpf.ui.dashboard import clear_dashboard_cache, render_dashboard
+from ulpf.ui.errors import show_error
 from ulpf.ui.ingestion import render_batch_preview, render_ingestion_controls
 from ulpf.ui.sql_console import render_sql_console
 from ulpf.ui.theme import apply_theme
@@ -30,8 +31,7 @@ def render_homelab() -> None:
         st.error("Homelab dependencies are missing. Install requirements-homelab.txt and restart Streamlit.")
         st.stop()
     except Exception as exc:
-        st.error("Could not open local storage. No fallback backend was started.")
-        st.code(str(exc))
+        show_error(exc, "Could not open local storage. No fallback backend was started.")
         st.stop()
 
     with st.sidebar:
@@ -45,8 +45,7 @@ def render_homelab() -> None:
                 st.success(f"{result.committed:,} committed · {result.quarantined:,} quarantined · {result.duplicates:,} duplicates")
                 clear_dashboard_cache()
             except Exception as exc:
-                st.error("Local ingestion failed; event-table changes were rolled back.")
-                st.code(str(exc))
+                show_error(exc, "Local ingestion failed; inspect server logs before retrying.")
         st.caption(f"Storage directory: {settings.homelab_directory}")
         st.caption("One Streamlit process owns this database. Stop it before copying a backup or opening another writer.")
 

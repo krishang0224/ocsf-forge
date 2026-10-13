@@ -4,6 +4,11 @@ Changes to parser output, event identity, and storage layout are recorded here. 
 
 ## Unreleased
 
+- Bound XML nesting before recursive serialization and share decoding between document/event paths. Deep documents now enter quarantine intact instead of crashing; XML parser version is 1.2.2.
+- Project visible preview columns directly, avoiding recursive copies of unused metadata. Full downloads retain their existing conversion path.
+- Reject missing/blank/non-string event IDs before backend writes, including the Trino path that previously accepted a blank identity.
+- Configure shorter Trino coordinator query history after a real heap failure under load. Add isolated pipeline and Kafka outage stress harnesses and preserve primary errors when test cleanup fails. See the [October 13 audit](docs/stress-testing-2026-10-13.md).
+
 - Add an independent offline official OCSF Toolkit CI gate against checksum-pinned toolkit/compiler/schema artifacts. Enforce each fixture's exact outcome and distinguish regressions from infrastructure failures; hosted validation is no longer the only recursive check.
 - Add nested-field negative controls, wrong-reason/extra-error checks for the known-negative fixture, and 32 security/text parser edge-case tests. No runtime parser behavior or fixture source inputs changed.
 

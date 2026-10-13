@@ -176,25 +176,26 @@ Adding a parser does not require changing the pipeline or UI. See [parser develo
 
 ## Measured, not guessed
 
-Latest stress audit: **September 10, 2026**, on an Intel Core i5-12450H with 16 GB RAM. These are single-run development observations, not production capacity promises or Raspberry Pi benchmarks. Trino used a temporary 2 GB heap and two-CPU limit for this audit; the normal deployment defaults were not changed.
+Latest stress audit: **October 13, 2026**, on an Intel Core i5-12450H with 16 GB RAM. These are single-run development observations with desktop activity, not production capacity promises or Raspberry Pi benchmarks. Trino used a temporary 2 GB heap and two-CPU limit; the normal deployment keeps its 4 GB heap. Coordinator history now uses shorter, configurable retention.
 
 | Check | Result |
 | --- | ---: |
-| Homelab sustained ingestion | 250,000 events in 10,000-event commits; 84.27 seconds including parsing |
-| Homelab 50,000-event transaction | 7.64 seconds to insert; 6.70 seconds to replay |
-| Eight homelab sessions, same input | 1,000 unique events; 7,000 duplicates detected |
-| Trino 10,000-event ingestion and replay | 84.66 seconds combined |
+| Homelab sustained ingestion | 500,000 events in 10,000-event commits; 147.39 seconds including parsing |
+| Homelab 50,000-event transaction | 6.26 seconds to insert; 5.00 seconds to replay |
+| Sixteen homelab sessions, same input | 1,000 unique events; 15,000 duplicates detected |
+| Mixed-format parsing | 500,000 events in 34.94 seconds with a 2 GiB process scope; a 1.5 GiB scope was insufficient |
+| Trino 25,000-event ingestion and replay after tuning | 404.06 seconds combined; no coordinator restart |
 | Three concurrent Trino writers | 1,000 unique events; real commit conflicts retried |
-| Kafka outage recovery | 1,500 raw events accounted for; offsets held during the outage |
-| Invalid Kafka records | 150 quarantined; 150 unique dead letters |
-| Failure recovery | DuckDB memory exhaustion/process termination and Trino partial-write replay passed |
+| Kafka outage recovery | 5,000 raw events accounted for; offsets held during the outage |
+| Invalid Kafka records | 500 quarantined; 500 unique dead letters |
+| Real Trino heap-failure recovery | Replay filled 6,184 missing normalized rows; 25,000 unique IDs preserved |
 | Automated checks | [Full-stack CI](https://github.com/krishang0224/ocsf-forge/actions/workflows/ci.yml) · [Homelab CI](https://github.com/krishang0224/ocsf-forge/actions/workflows/homelab.yml) |
 
-**Known limit:** a single 100,000-event homelab transaction exhausted both the 256 MB and 512 MB DuckDB engine budgets. It rolled back without partial event rows, and subsequent reads and writes worked. Smaller complete batches succeeded; total database size and single-transaction size are different limits. The engine memory setting does not cap total Python/Streamlit memory.
+**Known limits:** a single 100,000-event homelab transaction exhausted the 256 MB engine budget and rolled back without partial event rows; the earlier audit also failed at 512 MB. The constrained Trino coordinator exhausted its heap during the first 25,000-event run with the original history defaults. Replay recovered the partial writes, and the fresh workload passed after history tuning. Smaller complete batches and total database size are different from single-transaction limits. Engine settings do not cap all Python/Streamlit allocations.
 
-The audit fixed malformed Unicode aborting batches, slow Syslog field scanning, escaped-quote loss, and byte-only input limits. Binding DuckDB inserts by column reduced a separate 10,000-event insert comparison from 4.31 to 1.27 seconds. Trino retains size-aware batching and idempotent conflict retries.
+The latest audit fixed deep XML crashing serialization, avoided copying hidden preview metadata, rejected blank event IDs before backend writes, and shortened coordinator query-history retention. Earlier fixes include Unicode quarantine, linear Syslog field scanning, record budgets and column-bound DuckDB insertion. Trino retains size-aware batching and idempotent conflict retries.
 
-See the [full stress report and reproduction commands](docs/stress-testing.md) for methodology and untested scenarios. CI runs deterministic regressions, lint, and Compose validation; it does not reproduce these live load timings. Test counts remain in CI output rather than a fixed README claim.
+See the [latest stress report and reproduction commands](docs/stress-testing-2026-10-13.md) and [earlier audit](docs/stress-testing.md) for methodology and untested scenarios. CI runs deterministic regressions, the independent OCSF gate, lint and Compose validation; it does not reproduce these live load timings. Test counts remain in CI output rather than a fixed README claim.
 
 ## Stream from Kafka
 

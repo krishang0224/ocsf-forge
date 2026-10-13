@@ -39,6 +39,16 @@ class RecordingTrino(TrinoService):
         return (["value"], [[1]]) if statement.lstrip().upper().startswith("SELECT") else ([], [])
 
 
+@pytest.mark.parametrize("identity", ["", "   ", None, 1])
+def test_missing_event_identity_is_rejected_before_connecting(identity):
+    client = RecordingTrino()
+    event = replace(run_pipeline(['{"message":"identity probe"}'])[0], event_id=identity)
+    with pytest.raises(ValueError, match="event_id"):
+        client.ingest_events([event])
+    assert client.connections == 0
+    assert client.calls == []
+
+
 def test_read_only_console_accepts_select():
     client = RecordingTrino()
     result, _ = client.query("SELECT 1")

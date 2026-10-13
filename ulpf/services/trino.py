@@ -127,6 +127,8 @@ class TrinoService(QueryBackend):
         received_items = list(events)
         if not received_items:
             return IngestionResult("", 0, 0, 0, 0, "EMPTY")
+        if any(not isinstance(event.event_id, str) or not event.event_id.strip() for event in received_items):
+            raise ValueError("Every event requires a nonempty deterministic event_id")
         items = list({event.event_id: event for event in received_items}.values())
         input_duplicates = len(received_items) - len(items)
         run_id = str(uuid.uuid4())

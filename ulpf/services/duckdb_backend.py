@@ -172,8 +172,8 @@ class DuckDBBackend(QueryBackend):
         received = list(events)
         if not received:
             return IngestionResult("", 0, 0, 0, 0, "EMPTY")
-        if any(not event.event_id for event in received):
-            raise ValueError("Every event requires a deterministic event_id")
+        if any(not isinstance(event.event_id, str) or not event.event_id.strip() for event in received):
+            raise ValueError("Every event requires a nonempty deterministic event_id")
         run_id = str(uuid.uuid4())
         items = [replace(event, ingestion_run_id=run_id) for event in {event.event_id: event for event in received}.values()]
 

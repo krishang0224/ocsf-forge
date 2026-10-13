@@ -114,6 +114,8 @@ services:
     environment:
       S3_ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}
       S3_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin}
+      TRINO_QUERY_HISTORY_MAX: ${TRINO_QUERY_HISTORY_MAX:-20}
+      TRINO_QUERY_HISTORY_MIN_AGE: ${TRINO_QUERY_HISTORY_MIN_AGE:-30s}
     ports:
       - "127.0.0.1:8080:8080"
     volumes:
@@ -121,6 +123,7 @@ services:
       - ./infra/trino/access-control.properties:/etc/trino/access-control.properties:ro,Z
       - ./infra/trino/access-rules.json:/etc/trino/access-rules.json:ro,Z
       - ./infra/trino/jvm.config:/etc/trino/jvm.config:ro,Z
+      - ./infra/trino/config.properties:/etc/trino/config.properties:ro,Z
     healthcheck:
       test: ["CMD-SHELL", "trino --server http://localhost:8080 --user ulpf_writer --catalog iceberg --execute 'SHOW SCHEMAS' >/dev/null 2>&1"]
       interval: 10s

@@ -6,6 +6,7 @@ from ipaddress import ip_address
 
 from ulpf.parsing.authentication import authentication_action
 from ulpf.parsing.json_document import decode_json
+from ulpf.parsing.xml_document import decode_xml
 
 MAPPED_FIELDS = {
     "@timestamp",
@@ -147,7 +148,7 @@ class CsvRowParser:
 class XmlEventParser:
     name = "xml"
     source_format = "xml"
-    version = "1.2.1"
+    version = "1.2.2"
 
     def detect(self, value: str) -> float:
         return 0.8 if value.lstrip().startswith("<") and value.rstrip().endswith(">") else 0.0
@@ -156,9 +157,9 @@ class XmlEventParser:
         import xml.etree.ElementTree as ET
 
         try:
-            root = ET.fromstring(value)
-        except ET.ParseError:
-            return {"_parsed": False, "parse_notes": "Invalid XML"}
+            root = decode_xml(value)
+        except (ET.ParseError, ValueError) as exc:
+            return {"_parsed": False, "parse_notes": f"Invalid XML: {exc}"}
         item = {}
         for child in root.iter():
             if child is root or len(child) != 0:

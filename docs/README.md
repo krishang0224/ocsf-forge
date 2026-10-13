@@ -15,7 +15,7 @@ Start with the [repository overview and quickstarts](../README.md). Choose the o
 | How do I recover or tune ingestion? | [Persistence, replay and maintenance](operations.md) |
 | Where are the configuration settings? | [Configuration entry points](configuration.md) |
 | What must change before network exposure? | [Production security prerequisites](production-security.md) |
-| What has actually been load-tested? | [Dated stress results and reproducible harnesses](stress-testing.md) |
+| What has actually been load-tested? | [Latest stress results and reproducible harnesses](stress-testing-2026-10-13.md), [earlier audit](stress-testing.md) |
 | Can I change the dashboard appearance? | [Themes and appearance controls](appearance.md) |
 
 Project policies: [Apache-2.0 license](../LICENSE), [security reporting](../.github/SECURITY.md), [changelog](../CHANGELOG.md), [issue templates](../.github/ISSUE_TEMPLATE/), [full-stack CI](../.github/workflows/ci.yml), [homelab CI](../.github/workflows/homelab.yml).

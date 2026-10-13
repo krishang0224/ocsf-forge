@@ -19,6 +19,7 @@ from ulpf.parsers import LogParserEngine
 from ulpf.parsing.json_document import decode_json
 from ulpf.parsing.limits import InputLimitError, check_event_limit
 from ulpf.parsing.structured import MAPPED_FIELDS
+from ulpf.parsing.xml_document import decode_xml
 
 if TYPE_CHECKING:
     import pandas as pd
@@ -159,9 +160,10 @@ def run_payload(
         return run_pipeline(lines, source_id=identity, source_name=filename, forced_format="json", max_events=max_events)
     if lowered.endswith(".xml") or re.match(r"<(?:[A-Za-z_:]|\?)", text.lstrip()):
         try:
-            root = ET.fromstring(text)
-        except ET.ParseError:
-            return run_pipeline([text], source_id=identity, source_name=filename, forced_format="xml")
+            root = decode_xml(text)
+        except (ET.ParseError, ValueError) as exc:
+            return [OCSFNormalizer().normalize(text, "xml", {"_parsed": False, "parse_notes": str(exc)},
+                                               source_id=identity, source_name=filename)]
         root_name = root.tag.rsplit("}", 1)[-1].lower()
         nodes = list(root) if root_name in {"events", "logs", "records"} and list(root) else [root]
         check_event_limit(len(nodes), max_events)
@@ -208,9 +210,18 @@ def _looks_like_csv(text: str) -> bool:
     return bool({name.strip().lstrip("\ufeff").lower() for name in header} & CSV_FIELDS)
 
 
-def events_to_frame(events: list[NormalizedEvent], include_raw: bool = False) -> pd.DataFrame:
+def events_to_frame(
+    events: list[NormalizedEvent], include_raw: bool = False, *, columns: list[str] | None = None,
+) -> pd.DataFrame:
     import pandas as pd
 
+    if columns is not None:
+        unknown = set(columns) - NormalizedEvent.__dataclass_fields__.keys()
+        if unknown:
+            raise ValueError(f"Unknown event columns: {', '.join(sorted(unknown))}")
+        if not include_raw and "original_raw_payload" in columns:
+            raise ValueError("Raw payload requires include_raw=True")
+        return pd.DataFrame([{name: getattr(event, name) for name in columns} for event in events], columns=columns)
     rows = []
     for event in events:
         row = event.to_dict()

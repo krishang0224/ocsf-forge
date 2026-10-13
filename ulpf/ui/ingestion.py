@@ -70,7 +70,6 @@ def render_batch_preview(events: list) -> None:
     if not events:
         st.info("Choose a source in the left panel to prepare a batch.")
         return
-    frame = events_to_frame(events[:1000])
     if len(events) > 1000:
         st.caption(f"Previewing 1,000 of {len(events):,} events. Ingestion and downloads include the complete batch.")
     columns = [
@@ -88,7 +87,8 @@ def render_batch_preview(events: list) -> None:
         "parse_notes",
         "raw_payload_hash",
     ]
-    st.dataframe(frame[columns], width="stretch", height=420, hide_index=True)
+    frame = events_to_frame(events[:1000], columns=columns)
+    st.dataframe(frame, width="stretch", height=420, hide_index=True)
     if not st.button("Prepare full-batch downloads"):
         return
     frame = events_to_frame(events)

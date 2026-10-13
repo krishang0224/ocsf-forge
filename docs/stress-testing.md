@@ -1,5 +1,7 @@
 # Stress and recovery audit — September 10, 2026
 
+Latest results: [October 13, 2026 stress audit](stress-testing-2026-10-13.md), including larger workloads, a real Trino heap failure/recovery, and the resulting fixes. This page preserves the earlier measurements.
+
 This is a bounded development audit, not a claim that every possible failure has been tested. The machine was an Intel Core i5-12450H, 16 GB RAM, Linux x86-64, with other desktop applications running and approximately 5 GB initially available. Python was 3.11.15; DuckDB was 1.5.5. Timing observations are single runs, not statistically controlled benchmarks or Raspberry Pi results.
 
 The Trino 483 / Lakekeeper / MinIO / PostgreSQL stack used new, isolated test volumes. A temporary override limited Trino to a 2 GB Java heap, 3 GB container memory and two CPUs; the repository's normal 4 GB heap was not changed. Kafka 4.3.1 used a 384 MB heap for this audit. No production data was involved.

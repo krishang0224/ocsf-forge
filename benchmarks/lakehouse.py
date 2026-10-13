@@ -15,6 +15,17 @@ from ulpf.sample_data import SAMPLE_LOGS
 from ulpf.services.trino import TrinoService
 
 
+def cleanup_sources(backend, sources):
+    errors = []
+    for identity in sources:
+        for table in ("application_logs", "raw_events", "quarantine_events", "ingestion_runs"):
+            try:
+                backend.execute(f"DELETE FROM iceberg.logging.{table} WHERE source_id=?", [identity])
+            except Exception as exc:
+                errors.append({"source_id": identity, "table": table, "error": str(exc)})
+    return errors
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--confirm-test-stack", action="store_true", required=True)
@@ -27,6 +38,7 @@ def main():
     backend = TrinoService(config)
     backend.ensure_lakehouse()
     prefix = f"stress-{uuid.uuid4().hex}"
+    print(json.dumps({"test_source_prefix": prefix}), flush=True)
     sources = []
 
     def source(label):
@@ -36,7 +48,12 @@ def main():
 
     def check(name, operation):
         started = perf_counter()
-        details = operation()
+        try:
+            details = operation()
+        except Exception as exc:
+            print(json.dumps({"case": name, "ok": False, "seconds": round(perf_counter() - started, 3),
+                              "error": f"{type(exc).__name__}: {exc}"}), flush=True)
+            raise
         print(json.dumps({"case": name, "ok": True, "seconds": round(perf_counter() - started, 3), "details": details}), flush=True)
 
     try:
@@ -103,10 +120,11 @@ def main():
             return {"queries": len(queries)}
         check("dashboard-query-bundle", dashboard)
     finally:
-        for identity in sources:
-            for table in ("application_logs", "raw_events", "quarantine_events", "ingestion_runs"):
-                backend.execute(f"DELETE FROM iceberg.logging.{table} WHERE source_id=?", [identity])
+        cleanup_errors = cleanup_sources(backend, sources)
+        if cleanup_errors:
+            print(json.dumps({"case": "test-source-cleanup", "ok": False, "errors": cleanup_errors}), flush=True)
+    return 1 if cleanup_errors else 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

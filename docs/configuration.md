@@ -13,6 +13,7 @@ There are three execution paths, not one interchangeable configuration surface. 
 | Compaction thresholds and retention | [Operations](operations.md#maintenance), [maintenance worker](../ulpf/maintenance.py) and the `maintenance` Compose service |
 | Stale ingestion detection | `ULPF_STUCK_RUN_TIMEOUT_SECONDS=3600`, `ULPF_WATCHDOG_INTERVAL_SECONDS=300`; [watchdog behavior](operations.md#stale-run-watchdog) |
 | Browser exception details | `ULPF_DEBUG_ERRORS=false`; enable `true` only for trusted local debugging; [security guidance](production-security.md) |
+| Trino coordinator query history | `TRINO_QUERY_HISTORY_MAX=20`, `TRINO_QUERY_HISTORY_MIN_AGE=30s`; [memory and diagnostic tradeoff](operations.md#coordinator-query-history) |
 
 Compose reads `.env` for substitution. Running Python or Streamlit directly does not automatically load it. Set shell environment variables or use a service manager, then restart the process. Never commit an actual `.env` containing credentials.
 

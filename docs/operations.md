@@ -52,3 +52,9 @@ With the detection profile enabled, also monitor successful scan timestamps, det
 `ULPF_INSERT_BATCH_SIZE` limits rows per Iceberg merge, while `ULPF_TRINO_MAX_QUERY_BYTES` also splits batches according to their encoded parameter size. Keep the latter below Trino's configured query-text limit; the default 850,000-byte safety ceiling is intended for the stock 1 MB limit. `ULPF_ICEBERG_COMMIT_RETRIES` controls bounded exponential backoff when concurrent writers conflict on an Iceberg partition. Read-only console results are fetched only up to `ULPF_QUERY_ROW_LIMIT`, rather than loading an unbounded result into application memory.
 
 The local Trino container is capped at a 4 GB Java heap in `infra/trino/jvm.config`. Size this explicitly for production instead of inheriting the container default, which can reserve most of the host's memory.
+
+## Coordinator query history
+
+Completed parameter-heavy queries retain coordinator memory for their text, plans and statistics. The [October stress audit](stress-testing-2026-10-13.md) reached a Java heap failure with the original 15-minute minimum history age. Compose now sets `TRINO_QUERY_HISTORY_MAX=20` and `TRINO_QUERY_HISTORY_MIN_AGE=30s` in the mounted Trino configuration.
+
+The maximum history count is subject to the minimum expiration age, so a short burst can retain more than 20 queries. These controls shorten Web UI diagnostics; they do not change table snapshots or ingestion-run retention. For longer investigation history, use an external event listener or increase the settings with a corresponding coordinator memory budget. [Upstream definitions](https://trino.io/docs/483/admin/properties-query-management.html#query-max-history).

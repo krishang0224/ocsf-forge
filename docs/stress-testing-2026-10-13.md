@@ -53,6 +53,8 @@ Compose now supplies `TRINO_QUERY_HISTORY_MAX=20` and `TRINO_QUERY_HISTORY_MIN_A
 
 **Audit harnesses:** the lakehouse harness's cleanup exception could obscure the original storage failure when the server was down. It now reports cleanup failures separately and attempts every owned source/table. The new pipeline harness can isolate workloads in children and continue after a child failure or timeout. A new streaming harness reproduces the offset/outage/dead-letter checks using unique topics and a managed worker process.
 
+**Build context:** the local validation cache occupied 23 MiB and was ignored by Git but still included in Docker's build context. Container builds now exclude that cache, build/distribution artifacts, package metadata and coverage output. The local cache is preserved for offline checks.
+
 ## Reproduce
 
 Install application, homelab and test dependencies in Python 3.11. Run workload processes with an appropriate explicit OS memory limit; on this Linux machine, scopes used `systemd-run --user --scope -p MemoryMax=2G -p MemorySwapMax=0` before the command. These settings protect the test process budget but do not make a busy desktop a controlled benchmark.

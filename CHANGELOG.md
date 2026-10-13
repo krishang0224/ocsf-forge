@@ -4,6 +4,8 @@ Changes to parser output, event identity, and storage layout are recorded here. 
 
 ## Unreleased
 
+- Exclude downloaded validation caches, build metadata and coverage output from container build contexts; runtime source and offline validation files remain in the checkout.
+
 - Bound XML nesting before recursive serialization and share decoding between document/event paths. Deep documents now enter quarantine intact instead of crashing; XML parser version is 1.2.2.
 - Project visible preview columns directly, avoiding recursive copies of unused metadata. Full downloads retain their existing conversion path.
 - Reject missing/blank/non-string event IDs before backend writes, including the Trino path that previously accepted a blank identity.
